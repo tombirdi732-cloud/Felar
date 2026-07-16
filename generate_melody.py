@@ -6,6 +6,10 @@
 Скрипт не требует никаких библиотек — он сам собирает стандартный
 MIDI-файл (SMF format 1), который можно перетащить прямо в FL Studio.
 
+Темп (103 BPM), тональность (Em) и главный гитарный хук сняты с голосовой
+записи автора: вокал в куплетах живёт в районе E3-A3, поэтому соло-гитара
+в куплетах отвечает короткими фразами, а не играет поверх голоса.
+
 Запуск:
     python3 generate_melody.py            # создаст ya_ved_ne_svyat.mid
     python3 generate_melody.py --no-drums # без барабанов, только гитары и бас
@@ -29,7 +33,7 @@ import sys
 
 # ---------------------------------------------------------------- настройки
 
-TEMPO_BPM = 92          # спокойный, чуть тягучий темп под этот текст
+TEMPO_BPM = 103         # темп снят с голосовой записи (стабильные ~103 BPM)
 TPQ = 480               # тиков на четверть
 BEAT = TPQ
 BAR = 4 * TPQ           # размер 4/4
@@ -56,13 +60,24 @@ STRUM_PATTERN = [(0, 1.4, "D"), (1.5, 0.9, "D"), (2.5, 0.45, "U"),
 # ------------------------------------------------------------------ мелодии
 # Каждая мелодия — список тактов; такт — список (доля, длительность, нота).
 
+# Главный хук — снят с голосовой записи (нисходящая линия B4-A4-G4-F#4
+# и ответ E4-D4-C4): звучит в интро, проигрышах и финале.
+HOOK = [
+    [(0, 1.5, 71), (1.5, .5, 69), (2, 1, 67), (3, 1, 66)],  # Em: B4 A4 G4 F#4
+    [(0, 2, 64), (2, 1, 66), (3, 1, 69)],                   # C:  E4 F#4 A4
+    [(0, 1.5, 71), (1.5, .5, 69), (2, 1, 67), (3, 1, 66)],  # G:  B4 A4 G4 F#4
+    [(0, 1, 64), (1, 1, 62), (2, 1, 60), (3, 1, 59)],       # D:  E4 D4 C4 B3
+]
+
 MELODIES = {
-    # Куплет: спокойная вокальная линия вокруг E4-B4
+    "hook": HOOK,
+    # Куплет: вокал (E3-A3) занимает первую половину такта, поэтому гитара
+    # отвечает короткими фразами во второй половине — не мешает голосу
     "verse": [
-        [(0, 1, 64), (1, .5, 67), (1.5, .5, 66), (2, 2, 64)],   # Em
-        [(0, 1, 67), (1, .5, 69), (1.5, .5, 67), (2, 2, 64)],   # C
-        [(0, 1, 71), (1, .5, 69), (1.5, .5, 67), (2, 2, 62)],   # G
-        [(0, 1, 66), (1, .5, 64), (1.5, .5, 66), (2, 2, 69)],   # D
+        [(2, .5, 64), (2.5, .5, 66), (3, 1, 67)],               # Em: E4 F#4 G4
+        [(2, .5, 67), (2.5, .5, 69), (3, 1, 67)],               # C:  G4 A4 G4
+        [(2, .5, 71), (2.5, .5, 69), (3, 1, 67)],               # G:  B4 A4 G4
+        [(2, .5, 66), (2.5, .5, 64), (3, 1, 66)],               # D:  F#4 E4 F#4
     ],
     # Припев: выше и напористее (8 тактов, вторая половина с вариацией)
     "chorus": [
@@ -75,14 +90,8 @@ MELODIES = {
         [(0, 1, 74), (1, .5, 71), (1.5, .5, 67), (2, 2, 71)],   # G
         [(0, 1, 69), (1, .5, 71), (1.5, .5, 74), (2, 2, 76)],   # D -> в тонику
     ],
-    # Интро: первые 4 такта только перебор, потом тихий мотив
-    "intro": [
-        [], [], [], [],
-        [(0, 2, 71), (2, 2, 67)],                               # Em
-        [(0, 2, 72), (2, 2, 67)],                               # C
-        [(0, 2, 71), (2, 2, 62)],                               # G
-        [(0, 2, 69), (2, 1, 66), (3, 1, 64)],                   # D
-    ],
+    # Интро: первые 4 такта только перебор, потом вступает хук
+    "intro": [[], [], [], []] + HOOK,
     # Бридж: мягкая восходящая линия
     "bridge": [
         [(0, .5, 64), (.5, .5, 67), (1, 1, 71), (2, 2, 67)],    # Em
@@ -92,14 +101,6 @@ MELODIES = {
     ],
 }
 
-# Проигрыш: гитарный рифф восьмыми (арпеджио вверх-вниз по аккорду)
-RIFF = {
-    "Em": [64, 67, 71, 76, 74, 71, 67, 71],
-    "C":  [60, 64, 67, 72, 76, 72, 67, 64],
-    "G":  [67, 71, 74, 79, 74, 71, 67, 64],
-    "D":  [66, 69, 74, 78, 74, 69, 66, 69],
-}
-
 # --------------------------------------------------------- структура песни
 # (название, количество кругов Em|C|G|D, параметры слоёв)
 
@@ -107,19 +108,19 @@ SECTIONS = [
     ("Интро (перебор)", 2, dict(pick=True, lead="intro", bass="soft", vel=0.85)),
     ("Куплет 1",        1, dict(pick=True, lead="verse", bass="drive", drums="light", vel=0.9)),
     ("Куплет 2",        1, dict(pick=True, lead="verse", bass="drive", drums="light", vel=0.95)),
-    ("Проигрыш",        1, dict(pick=True, strum=True, lead="riff", bass="drive", drums="full", vel=1.0)),
+    ("Проигрыш",        1, dict(pick=True, strum=True, lead="hook", bass="drive", drums="full", vel=1.0)),
     ("Припев",          2, dict(pick=True, strum=True, lead="chorus", bass="drive", drums="full", crash=True, vel=1.0)),
-    ("Проигрыш",        1, dict(pick=True, strum=True, lead="riff", bass="drive", drums="full", vel=1.0)),
+    ("Проигрыш",        1, dict(pick=True, strum=True, lead="hook", bass="drive", drums="full", vel=1.0)),
     ("Куплет 3",        1, dict(pick=True, lead="verse", bass="drive", drums="light", vel=0.9)),
     ("Куплет 4",        1, dict(pick=True, lead="verse", bass="drive", drums="light", vel=0.95)),
     ("Припев",          2, dict(pick=True, strum=True, lead="chorus", bass="drive", drums="full", crash=True, vel=1.0)),
     ("Бридж",           1, dict(pick=True, lead="bridge", bass="soft", drums="light", vel=0.8)),
-    ("Проигрыш",        1, dict(pick=True, strum=True, lead="riff", bass="drive", drums="full", vel=1.0)),
+    ("Проигрыш",        1, dict(pick=True, strum=True, lead="hook", bass="drive", drums="full", vel=1.0)),
     ("Куплет 5",        1, dict(pick=True, lead="verse", bass="drive", drums="light", vel=0.9)),
     ("Куплет 6",        1, dict(pick=True, lead="verse", bass="drive", drums="light", vel=0.95)),
     ("Припев",          2, dict(pick=True, strum=True, lead="chorus", bass="drive", drums="full", crash=True, vel=1.0)),
     ("Финальный проигрыш (затухание)", 2,
-     dict(pick=True, strum=True, lead="riff", bass="drive", drums="full", fade=True, vel=1.0)),
+     dict(pick=True, strum=True, lead="hook", bass="drive", drums="full", fade=True, vel=1.0)),
 ]
 
 # --------------------------------------------------- низкоуровневый SMF-код
@@ -217,11 +218,6 @@ def add_lead_melody(track, bar_tick, bar_notes, vel):
         track.note(bar_tick + beat * BEAT, dur * BEAT * 0.95, pitch, hum(vel))
 
 
-def add_lead_riff(track, bar_tick, chord, vel):
-    for i, pitch in enumerate(RIFF[chord]):
-        track.note(bar_tick + i * BEAT // 2, int(BEAT * 0.45), pitch, hum(vel))
-
-
 def add_bass(track, bar_tick, chord, style, vel):
     root = CHORDS[chord]["bass"]
     if style == "soft":
@@ -287,9 +283,7 @@ def build_song(with_drums=True):
             if cfg.get("strum"):
                 add_strum(rhythm, bar_tick, chord, 96 * v)
 
-            if cfg.get("lead") == "riff":
-                add_lead_riff(lead, bar_tick, chord, 92 * v)
-            elif melody:
+            if melody:
                 add_lead_melody(lead, bar_tick, melody[bar % len(melody)], 98 * v)
 
             if cfg.get("bass"):
