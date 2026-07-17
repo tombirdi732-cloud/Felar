@@ -38,7 +38,7 @@ export async function requestPhoneCode(
   await prisma.phoneCode.create({
     data: { phone, code, expiresAt: new Date(Date.now() + 10 * 60 * 1000) },
   });
-  await sendSms(phone, `Felar: код подтверждения ${code}. Никому его не сообщайте.`);
+  await sendSms(phone, `СтройАренда: код подтверждения ${code}. Никому его не сообщайте.`);
 
   const isDev = (process.env.SMS_PROVIDER || "dev") === "dev";
   return {

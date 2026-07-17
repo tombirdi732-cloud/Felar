@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 @theme {
-  /* Фирменная палитра-плейсхолдер: заменяется на брендовые цвета заказчика */
-  --color-brand-50: #fff7ed;
-  --color-brand-100: #ffedd5;
-  --color-brand-200: #fed7aa;
-  --color-brand-300: #fdba74;
-  --color-brand-400: #fb923c;
-  --color-brand-500: #f97316;
-  --color-brand-600: #ea580c;
-  --color-brand-700: #c2410c;
-  --color-brand-800: #9a3412;
-  --color-brand-900: #7c2d12;
+  /* Фирменная палитра Tom | СтройАренда: золото и тёмный нави из логотипа */
+  --color-brand-50: #fbf7ee;
+  --color-brand-100: #f6ebd2;
+  --color-brand-200: #edd6a3;
+  --color-brand-300: #e4c073;
+  --color-brand-400: #ddab48;
+  --color-brand-500: #d99a2b;
+  --color-brand-600: #c08322;
+  --color-brand-700: #9c671d;
+  --color-brand-800: #7d511c;
+  --color-brand-900: #67421a;
 
-  --color-ink-900: #0f172a;
+  --color-ink-900: #1d2531;
   --color-ink-700: #334155;
   --color-ink-500: #64748b;
   --color-ink-300: #cbd5e1;
@@ -44,8 +44,9 @@ body {
     @apply w-full rounded-xl border border-ink-300 bg-white px-3.5 py-2.5 text-[15px] text-ink-900 placeholder:text-ink-500/70 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20;
   }
 
+  /* Тёмный текст на золоте — читаемее белого и в духе инструментальных брендов */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-[15px] font-semibold text-white transition hover:bg-brand-700 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-[15px] font-bold text-ink-900 transition hover:bg-brand-400 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
   }
 
   .btn-secondary {

@@ -39,7 +39,7 @@ export function Footer() {
       </div>
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-5 text-xs text-ink-500">
-          <span>© {new Date().getFullYear()} Felar. Платформа не принимает платежи и залоги.</span>
+          <span>© {new Date().getFullYear()} Tom | СтройАренда. Платформа не принимает платежи и залоги.</span>
           <span>Сделано для людей, которые делают сами.</span>
         </div>
       </div>

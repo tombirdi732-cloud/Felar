@@ -18,7 +18,7 @@ export default async function AuthPage() {
       <Logo />
       <div className="card mt-6 w-full p-6 sm:p-8">
         <h1 className="text-2xl font-bold tracking-tight">
-          {user ? "Подтверждение телефона" : "Вход на Felar"}
+          {user ? "Подтверждение телефона" : "Вход на СтройАренду"}
         </h1>
         <p className="mt-2 text-[15px] leading-relaxed text-ink-500">
           {user
@@ -29,7 +29,7 @@ export default async function AuthPage() {
           <AuthForm vkEnabled={vkConfigured()} loggedIn={Boolean(user)} />
         </div>
         <p className="mt-6 text-xs leading-relaxed text-ink-500">
-          Продолжая, вы соглашаетесь с правилами платформы. Felar не обрабатывает платежи —
+          Продолжая, вы соглашаетесь с правилами платформы. Tom | СтройАренда не обрабатывает платежи —
           все расчёты происходят лично между участниками.
         </p>
       </div>

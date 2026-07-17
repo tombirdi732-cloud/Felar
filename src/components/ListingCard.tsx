@@ -52,7 +52,7 @@ export function ListingCard({
             <NoPhoto />
           )}
           {listing.promoted && (
-            <span className="absolute left-2 top-2 rounded-lg bg-brand-600/95 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+            <span className="absolute left-2 top-2 rounded-lg bg-brand-500/95 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-ink-900">
               Продвинуто
             </span>
           )}

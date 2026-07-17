@@ -38,7 +38,7 @@ export default async function ProfilePage({
       {(sp.welcome || sp.verify) && (
         <div className="mb-5 rounded-xl bg-emerald-50 px-4 py-3 text-[15px] text-emerald-700">
           {sp.welcome
-            ? "Добро пожаловать на Felar! Заполните профиль — имя и город видят другие пользователи."
+            ? "Добро пожаловать! Заполните профиль — имя и город видят другие пользователи."
             : "Вы вошли через VK. Для размещения объявлений подтвердите номер телефона ниже."}
         </div>
       )}
@@ -59,7 +59,7 @@ export default async function ProfilePage({
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
             <Rating value={rating.avg} count={rating.count} />
-            <span>На Felar с {formatMonthYear(user.createdAt)}</span>
+            <span>На платформе с {formatMonthYear(user.createdAt)}</span>
             {user.city && <span>{user.city}</span>}
           </div>
         </div>

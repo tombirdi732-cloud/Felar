@@ -38,7 +38,7 @@ export function Pagination({
           aria-current={p === page ? "page" : undefined}
           className={
             p === page
-              ? "inline-flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 font-semibold text-white"
+              ? "inline-flex h-11 w-11 items-center justify-center rounded-xl bg-ink-900 font-semibold text-white"
               : "inline-flex h-11 w-11 items-center justify-center rounded-xl border border-ink-300 bg-white font-medium text-ink-700 hover:border-ink-500"
           }
         >

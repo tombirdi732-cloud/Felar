@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!user) return {};
   return {
     title: `${user.name} — профиль арендодателя`,
-    description: `Объявления и отзывы пользователя ${user.name} на Felar.`,
+    description: `Объявления и отзывы пользователя ${user.name} на Tom | СтройАренда.`,
   };
 }
 
@@ -73,7 +73,7 @@ export default async function PublicProfilePage({ params }: Props) {
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-500">
             <Rating value={rating.avg} count={rating.count} size="md" />
-            <span>На Felar с {formatMonthYear(profile.createdAt)}</span>
+            <span>На платформе с {formatMonthYear(profile.createdAt)}</span>
             {profile.city && (
               <span className="flex items-center gap-1"><IconPin className="h-4 w-4" />{profile.city}</span>
             )}

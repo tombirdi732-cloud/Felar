@@ -31,7 +31,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!listing) return {};
   const description = `${listing.title} в аренду — ${formatPrice(listing.pricePerDay)}/сутки, залог ${
     listing.deposit > 0 ? formatPrice(listing.deposit) : "не требуется"
-  }. ${listing.city}. Аренда от частного лица на Felar.`;
+  }. ${listing.city}. Аренда от частного лица на Tom | СтройАренда.`;
   return {
     title: `${listing.title} — аренда в ${listing.city}`,
     description,
@@ -274,7 +274,7 @@ export default async function ListingPage({ params }: Props) {
               </div>
             </Link>
             <div className="mt-3 space-y-1 border-t border-ink-100 pt-3 text-sm text-ink-500">
-              <p>На Felar с {formatMonthYear(listing.user.createdAt)}</p>
+              <p>На платформе с {formatMonthYear(listing.user.createdAt)}</p>
               <p>
                 {ownerListingsCount} {plural(ownerListingsCount, "активное объявление", "активных объявления", "активных объявлений")}
               </p>

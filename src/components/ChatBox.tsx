@@ -87,7 +87,7 @@ export function ChatBox({
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div
                 className={`max-w-[80%] rounded-2xl px-3.5 py-2.5 text-[15px] leading-relaxed ${
-                  mine ? "rounded-br-md bg-brand-600 text-white" : "rounded-bl-md bg-ink-100 text-ink-900"
+                  mine ? "rounded-br-md bg-ink-900 text-white" : "rounded-bl-md bg-ink-100 text-ink-900"
                 }`}
               >
                 {m.photoUrl && (
@@ -95,7 +95,7 @@ export function ChatBox({
                   <img src={m.photoUrl} alt="Фото в сообщении" className="mb-1.5 max-h-64 rounded-xl" />
                 )}
                 {m.text && <p className="whitespace-pre-line break-words">{m.text}</p>}
-                <p className={`mt-1 text-right text-[11px] ${mine ? "text-white/70" : "text-ink-500"}`}>
+                <p className={`mt-1 text-right text-[11px] ${mine ? "text-white/60" : "text-ink-500"}`}>
                   {new Date(m.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>

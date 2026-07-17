@@ -14,17 +14,15 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Felar — аренда инструмента и техники у людей рядом",
-    template: "%s — Felar",
+    default: "Tom | СтройАренда — аренда инструмента и техники у людей рядом",
+    template: "%s — Tom | СтройАренда",
   },
   description:
     "Классифайд аренды электроинструмента, строительной и садовой техники между частными лицами. Найдите инструмент рядом, договоритесь в чате, заберите лично.",
   openGraph: {
     type: "website",
     locale: "ru_RU",
-    siteName: "Felar",
-    // OG-изображение 1200x630 предоставляется заказчиком (ТЗ п. 5):
-    // положите файл в public/og.png — путь уже подключён.
+    siteName: "Tom | СтройАренда",
     images: ["/og.png"],
   },
 };

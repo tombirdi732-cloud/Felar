@@ -86,7 +86,7 @@ export default async function MessagesPage() {
                     </p>
                   </div>
                   {unread > 0 && (
-                    <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-brand-600 px-1.5 text-xs font-bold text-white">
+                    <span className="grid h-6 min-w-6 shrink-0 place-items-center rounded-full bg-brand-500 px-1.5 text-xs font-bold text-ink-900">
                       {unread}
                     </span>
                   )}

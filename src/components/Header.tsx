@@ -48,7 +48,7 @@ export async function Header() {
             <IconChat className="h-5 w-5" />
             <span className="hidden lg:inline">Сообщения</span>
             {unread > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 grid min-w-5 place-items-center rounded-full bg-brand-600 px-1 text-[11px] font-bold text-white lg:static lg:ml-1">
+              <span className="absolute -right-0.5 -top-0.5 grid min-w-5 place-items-center rounded-full bg-brand-500 px-1 text-[11px] font-bold text-ink-900 lg:static lg:ml-1">
                 {unread > 99 ? "99+" : unread}
               </span>
             )}
