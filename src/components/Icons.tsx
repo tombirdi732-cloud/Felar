@@ -184,20 +184,30 @@ export const IconBox = (p: P) => (
   </svg>
 );
 
+/** Слаги категорий, для которых есть фирменные иконки заказчика. */
+const BRAND_CATEGORY_ICONS = new Set([
+  "elektroinstrument",
+  "stroitelnaya-tekhnika",
+  "sadovaya-tekhnika",
+  "klining-tekhnika",
+  "izmeritelnoe-oborudovanie",
+  "prochee",
+]);
+
+/**
+ * Иконка категории — фирменные PNG заказчика (public/brand/categories/).
+ * Стиль «неон на тёмном» — размещать на тёмных плитках (bg-ink-900).
+ * Для новых категорий без своей иконки используется «Прочее».
+ */
 export function CategoryIcon({ slug, className }: { slug: string; className?: string }) {
-  const cls = className ?? "h-6 w-6";
-  switch (slug) {
-    case "elektroinstrument":
-      return <IconDrill className={cls} />;
-    case "stroitelnaya-tekhnika":
-      return <IconMixer className={cls} />;
-    case "sadovaya-tekhnika":
-      return <IconLeaf className={cls} />;
-    case "klining-tekhnika":
-      return <IconSpray className={cls} />;
-    case "izmeritelnoe-oborudovanie":
-      return <IconLevel className={cls} />;
-    default:
-      return <IconBox className={cls} />;
-  }
+  const file = BRAND_CATEGORY_ICONS.has(slug) ? slug : "prochee";
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/brand/categories/${file}.png`}
+      alt=""
+      loading="lazy"
+      className={`${className ?? "h-6 w-6"} object-contain`}
+    />
+  );
 }

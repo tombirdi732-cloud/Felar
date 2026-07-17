@@ -36,9 +36,15 @@ export default async function HomePage() {
 
   return (
     <div>
-      {/* Hero */}
-      <section className="bg-ink-900">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-14 sm:py-20 lg:grid-cols-2 lg:items-center">
+      {/* Hero — фирменный фон заказчика с затемнением для читаемости текста */}
+      <section className="relative bg-ink-900">
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url(/brand/hero.webp)" }}
+          aria-hidden
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-ink-900/95 via-ink-900/75 to-ink-900/35" aria-hidden />
+        <div className="relative mx-auto grid max-w-7xl gap-8 px-4 py-14 sm:py-20 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="mb-3 inline-flex rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-brand-300">
               Аренда между людьми — без посредников
@@ -75,10 +81,10 @@ export default async function HomePage() {
               <Link
                 key={c.id}
                 href={`/catalog/${c.slug}`}
-                className="group rounded-2xl bg-white/5 p-6 ring-1 ring-white/10 transition hover:bg-white/10"
+                className="group rounded-2xl bg-ink-900/60 p-6 ring-1 ring-white/10 backdrop-blur-sm transition hover:bg-ink-900/80 hover:ring-brand-500/50"
               >
-                <div className="grid h-12 w-12 place-items-center rounded-xl bg-brand-600/20 text-brand-400 transition group-hover:bg-brand-600 group-hover:text-white">
-                  <CategoryIcon slug={c.slug} className="h-6 w-6" />
+                <div className="grid h-12 w-12 place-items-center rounded-xl bg-white/5 ring-1 ring-white/10">
+                  <CategoryIcon slug={c.slug} className="h-8 w-8" />
                 </div>
                 <p className="mt-4 font-semibold text-white">{c.name}</p>
                 <p className="mt-1 text-sm text-ink-500">
@@ -101,8 +107,8 @@ export default async function HomePage() {
               href={`/catalog/${c.slug}`}
               className="card group flex flex-col items-start gap-3 p-4 transition hover:shadow-card-hover"
             >
-              <div className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand-600 transition group-hover:bg-brand-600 group-hover:text-white">
-                <CategoryIcon slug={c.slug} className="h-5.5 w-5.5" />
+              <div className="grid h-11 w-11 place-items-center rounded-xl bg-ink-900 transition group-hover:ring-2 group-hover:ring-brand-400">
+                <CategoryIcon slug={c.slug} className="h-7 w-7" />
               </div>
               <div>
                 <p className="font-semibold leading-tight text-ink-900">{c.name}</p>

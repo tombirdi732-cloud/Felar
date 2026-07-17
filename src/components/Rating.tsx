@@ -27,13 +27,12 @@ export function Rating({
 export function VerifiedBadge({ compact = false }: { compact?: boolean }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700"
+      className="inline-flex items-center gap-1 rounded-full bg-ink-900 px-2 py-0.5 text-xs font-semibold text-brand-300"
       title="Личность подтверждена документом"
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2.5 14.4 4l2.8-.2 1 2.7 2.3 1.6-.7 2.8.7 2.8-2.3 1.6-1 2.7-2.8-.2-2.4 1.5L9.6 20l-2.8.2-1-2.7-2.3-1.6.7-2.8-.7-2.8 2.3-1.6 1-2.7 2.8.2L12 2.5Z" />
-        <path d="m9 12 2 2 4-4" />
-      </svg>
+      {/* Фирменный бейдж верификации заказчика */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/brand/verified.png" alt="" className="h-3.5 w-3.5 object-contain" />
       {!compact && "Верифицирован"}
     </span>
   );
