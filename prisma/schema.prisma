@@ -1,0 +1,227 @@
+// Felar — схема данных платформы аренды инструментов.
+// Для разработки используется SQLite; в продакшне заменяется на PostgreSQL
+// сменой provider/url без переделки схемы (см. README).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ListingStatus {
+  ACTIVE // опубликовано
+  RENTED // сейчас в аренде
+  ARCHIVED // снято с публикации владельцем
+  BLOCKED // заблокировано модератором
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportTarget {
+  LISTING
+  USER
+  REVIEW
+}
+
+model User {
+  id            String   @id @default(cuid())
+  role          Role     @default(USER)
+  name          String
+  phone         String?  @unique
+  phoneVerified Boolean  @default(false)
+  vkId          String?  @unique
+  avatarUrl     String?
+  city          String?
+  about         String?
+  // Верификация по документу (бейдж «Верифицирован»)
+  docVerified   Boolean  @default(false)
+  docRequested  Boolean  @default(false)
+  blocked       Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions        Session[]
+  listings        Listing[]
+  favorites       Favorite[]
+  conversationsAsRenter Conversation[] @relation("renter")
+  messages        Message[]
+  reviewsWritten  Review[]  @relation("author")
+  reviewsReceived Review[]  @relation("target")
+  reportsSent     Report[]  @relation("reportAuthor")
+  reportsAgainst  Report[]  @relation("reportedUser")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Одноразовые коды подтверждения телефона (SMS).
+model PhoneCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  slug      String     @unique
+  name      String
+  parentId  String?
+  parent    Category?  @relation("subcategories", fields: [parentId], references: [id])
+  children  Category[] @relation("subcategories")
+  sortOrder Int        @default(0)
+  active    Boolean    @default(true)
+  listings  Listing[]
+
+  @@index([parentId])
+}
+
+model Listing {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category      @relation(fields: [categoryId], references: [id])
+  title       String
+  description String
+  pricePerDay Int // руб./сутки
+  priceWeek   Int? // руб./неделя (опционально, со скидкой)
+  priceMonth  Int? // руб./месяц (опционально, со скидкой)
+  deposit     Int           @default(0) // сумма залога, руб.
+  city        String
+  district    String?
+  lat         Float? // примерная точка, не точный адрес
+  lng         Float?
+  conditions  String? // условия аренды
+  status      ListingStatus @default(ACTIVE)
+  // Монетизация: платное поднятие и выделение (архитектурный задел)
+  promotedUntil    DateTime?
+  highlightedUntil DateTime?
+  views       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  photos        ListingPhoto[]
+  favorites     Favorite[]
+  conversations Conversation[]
+  reports       Report[]
+
+  @@index([categoryId, status])
+  @@index([city, status])
+  @@index([userId])
+  @@index([status, createdAt])
+}
+
+model ListingPhoto {
+  id        String  @id @default(cuid())
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  url       String
+  sortOrder Int     @default(0)
+
+  @@index([listingId])
+}
+
+model Favorite {
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId String
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, listingId])
+}
+
+// Диалог всегда привязан к объявлению: пара «объявление + арендатор».
+model Conversation {
+  id        String   @id @default(cuid())
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  renterId  String
+  renter    User     @relation("renter", fields: [renterId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+  reviews  Review[]
+
+  @@unique([listingId, renterId])
+  @@index([renterId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  text           String?
+  photoUrl       String?
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// Отзыв жёстко привязан к диалогу (объявление + переписка):
+// это физически исключает накрутку — произвольный отзыв создать нельзя.
+// Один автор может оставить по диалогу ровно один отзыв.
+model Review {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  authorId       String
+  author         User         @relation("author", fields: [authorId], references: [id], onDelete: Cascade)
+  targetId       String
+  target         User         @relation("target", fields: [targetId], references: [id], onDelete: Cascade)
+  rating         Int // 1–5
+  text           String
+  hidden         Boolean      @default(false) // скрыт модератором по жалобе
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, authorId])
+  @@index([targetId, hidden])
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  authorId   String
+  author     User         @relation("reportAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  targetType ReportTarget
+  listingId  String?
+  listing    Listing?     @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  reportedUserId String?
+  reportedUser   User?    @relation("reportedUser", fields: [reportedUserId], references: [id], onDelete: SetNull)
+  reason     String
+  status     ReportStatus @default(OPEN)
+  resolution String?
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  @@index([status, createdAt])
+}

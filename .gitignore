@@ -1,0 +1,27 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# env
+.env
+.env*.local
+
+# database (локальная SQLite для разработки)
+prisma/dev.db
+prisma/dev.db-journal
+
+# загруженные пользователями фото (генерируются в рантайме)
+/public/uploads/
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+*.tsbuildinfo

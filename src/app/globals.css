@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  /* Фирменная палитра-плейсхолдер: заменяется на брендовые цвета заказчика */
+  --color-brand-50: #fff7ed;
+  --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
+  --color-brand-500: #f97316;
+  --color-brand-600: #ea580c;
+  --color-brand-700: #c2410c;
+  --color-brand-800: #9a3412;
+  --color-brand-900: #7c2d12;
+
+  --color-ink-900: #0f172a;
+  --color-ink-700: #334155;
+  --color-ink-500: #64748b;
+  --color-ink-300: #cbd5e1;
+  --color-ink-100: #f1f5f9;
+  --color-ink-50: #f8fafc;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.06), 0 4px 16px rgb(15 23 42 / 0.06);
+  --shadow-card-hover: 0 2px 4px rgb(15 23 42 / 0.08), 0 12px 32px rgb(15 23 42 / 0.12);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-ink-50);
+  color: var(--color-ink-900);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Единые классы компонентов. Объявлены в @layer components, чтобы
+   Tailwind-утилиты (pl-11, lg:hidden и т.п.) могли их переопределять. */
+@layer components {
+  .field {
+    @apply w-full rounded-xl border border-ink-300 bg-white px-3.5 py-2.5 text-[15px] text-ink-900 placeholder:text-ink-500/70 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-[15px] font-semibold text-white transition hover:bg-brand-700 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-ink-300 bg-white px-5 py-2.5 text-[15px] font-semibold text-ink-700 transition hover:border-ink-500 hover:text-ink-900 active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-[15px] font-medium text-ink-700 transition hover:bg-ink-100;
+  }
+
+  .card {
+    @apply rounded-2xl bg-white shadow-card;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink-700;
+  }
+}
