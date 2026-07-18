@@ -276,5 +276,50 @@
  "ic_star": {
   "w": 64,
   "h": 64
+ },
+ "plant_jump": {
+  "fw": 118,
+  "fh": 88,
+  "frames": 20
+ },
+ "plant_poison": {
+  "fw": 138,
+  "fh": 104,
+  "frames": 15
+ },
+ "blueflower": {
+  "fw": 118,
+  "fh": 124,
+  "frames": 20
+ },
+ "aplant1": {
+  "fw": 48,
+  "fh": 88,
+  "frames": 18
+ },
+ "aplant2": {
+  "fw": 113,
+  "fh": 92,
+  "frames": 18
+ },
+ "aplant3": {
+  "fw": 105,
+  "fh": 84,
+  "frames": 18
+ },
+ "aplant5": {
+  "fw": 42,
+  "fh": 80,
+  "frames": 15
+ },
+ "aplant7": {
+  "fw": 43,
+  "fh": 86,
+  "frames": 15
+ },
+ "awind1": {
+  "fw": 79,
+  "fh": 78,
+  "frames": 15
  }
 }

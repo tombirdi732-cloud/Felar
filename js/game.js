@@ -156,6 +156,7 @@ const SND = {
   sDash()  { this.noise(0.18, 0.22, 2000); this.blip(700, 0.16, 'sawtooth', 0.06, 180); },
   sGem()   { this.blip(880, 0.12, 'sine', 0.14); setTimeout(() => this.blip(1318, 0.25, 'sine', 0.12), 70); },
   sStomp() { this.blip(200, 0.12, 'sine', 0.22, 55); },
+  sBoing() { this.blip(160, 0.3, 'triangle', 0.2, 620); },
   sPop()   { this.noise(0.1, 0.25, 700); this.blip(260, 0.1, 'triangle', 0.15, 120); },
   sHurt()  { this.blip(220, 0.28, 'sawtooth', 0.18, 70); },
   sHeal()  { [523, 659, 784].forEach((f, i) => setTimeout(() => this.blip(f, 0.2, 'triangle', 0.1), i * 80)); },
@@ -354,6 +355,12 @@ const game = {
       const m = MANIFEST[s];
       L.vines.push({ s, x: x - m.w / 2, y: ty, ph: Math.random() * 6 });
     }
+    L.aplants = (data.aplants || []).map(([s, x, by]) => ({ s, x, y: by, ph: Math.random() * 6 }));
+    L.poisons = (data.poisons || []).map(([x, by]) => {
+      const m = MANIFEST.plant_poison;
+      L.hazards.push({ x: x - m.fw * 0.30, y: by - m.fh * 0.66, w: m.fw * 0.60, h: m.fh * 0.62 });
+      return { x, y: by, ph: Math.random() * 6 };
+    });
     // параллакс-фон: детерминированная генерация
     let seed = 1234 + idx * 777;
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -384,6 +391,9 @@ const game = {
     }));
     this.gems = (data.gems || []).map(([x, y]) => ({ x, y, taken: false, ph: Math.random() * 6 }));
     this.potions = (data.potions || []).map(([x, y]) => ({ x, y, taken: false, ph: Math.random() * 6 }));
+    this.tramps = (data.tramps || []).map(([x, y]) => ({ x, y, t: -1 }));
+    this.checkpoints = (data.checkpoints || []).map(([x, y]) => ({ x, y, on: false, ph: Math.random() * 6 }));
+    this.checkpoint = { x: data.start.x, y: data.start.y };
     this.camX = clamp(data.start.x - W / 2, 0, data.width - W);
     this.camY = 0;
     particles = [];
@@ -453,6 +463,16 @@ const game = {
     this.state = 'gameover';
     SND.blip(150, 0.9, 'sawtooth', 0.15, 40);
     UI.showGameOver();
+  },
+  /* возрождение у последнего синего цветка: осколки сохраняются */
+  reviveAtCheckpoint() {
+    const p = this.player;
+    p.hp = 3; p.inv = 2; p.vx = 0; p.vy = 0; p.dashT = 0;
+    p.x = this.checkpoint.x; p.y = this.checkpoint.y - 4;
+    p.spawnX = p.x; p.spawnY = this.checkpoint.y;
+    this.state = 'play';
+    UI.clear(); UI.updateHud();
+    burst(p.x, p.y - 50, 16, { col: '#8fd8ff', speed: 150, life: 0.6, glow: true });
   },
 
   levelComplete() {
@@ -524,7 +544,8 @@ const game = {
         p.vx = Math.abs(p.vx) <= dec ? 0 : p.vx - Math.sign(p.vx) * dec;
       }
       p.vy = Math.min(p.vy + 2300 * dt, 1050);
-      if (!input.jumpHeld && p.vy < -260) p.vy = -260; // короткий прыжок
+      if (p.vy >= 0) p.launched = false;
+      if (!input.jumpHeld && p.vy < -260 && !p.launched) p.vy = -260; // короткий прыжок (не режет батут)
     }
 
     if (input.jumpBuf > 0 && (p.onGround || p.coyote > 0) && p.dashT <= 0) {
@@ -536,6 +557,7 @@ const game = {
 
     /* движение + коллизии */
     const wasBottom = p.y;
+    const vyBefore = p.vy;
     p.x += p.vx * dt;
     let box = { x: p.x - p.w / 2, y: p.y - p.h, w: p.w, h: p.h };
     for (const r of L.solids) {
@@ -578,11 +600,37 @@ const game = {
     /* падение в бездну */
     if (p.y > 720) { this.pitFall(); if (this.state !== 'play') return; }
 
-    /* шипы */
+    /* шипы и ядовитые цветы */
     const pbox = { x: p.x - p.w / 2, y: p.y - p.h, w: p.w, h: p.h };
     for (const hz of L.hazards) {
       if (p.inv <= 0 && p.dashT <= 0 && aabb(pbox, hz)) {
         this.hurt(hz.x + hz.w / 2); break;
+      }
+    }
+
+    /* батуты */
+    for (const tr of this.tramps) {
+      if (tr.t >= 0) { tr.t += dt; if (tr.t > 0.55) tr.t = -1; }
+      const tb = { x: tr.x - 40, y: tr.y - 70, w: 80, h: 70 };
+      if (vyBefore > 120 && aabb(pbox, tb)) {
+        p.vy = -1150; p.onGround = false; p.coyote = 0; p.squash = 0.4;
+        p.launched = true;
+        tr.t = 0;
+        SND.sBoing();
+        burst(tr.x, tr.y - 40, 12, { col: '#5fe0d0', speed: 160, life: 0.5, glow: true });
+      }
+    }
+
+    /* синие цветы-чекпоинты */
+    for (const cp of this.checkpoints) {
+      if (cp.on) continue;
+      if (Math.abs(p.x - cp.x) < 52 && Math.abs(p.y - cp.y) < 100) {
+        cp.on = true;
+        this.checkpoint = { x: cp.x, y: cp.y };
+        if (p.hp < 3) { p.hp++; UI.updateHud(); }
+        SND.sHeal();
+        this.banner = { text: 'Цветок запомнил тебя', t: 0.5 };
+        burst(cp.x, cp.y - 70, 20, { col: '#8fd8ff', speed: 170, life: 0.7, glow: true, up: 60 });
       }
     }
 
@@ -728,6 +776,41 @@ const game = {
       const x = d.x - camX, y = d.y - camY;
       if (x + im.width < -60 || x > W + 60) continue;
       ctx.drawImage(im, x, y);
+    }
+    /* анимированные растения */
+    for (const ap of L.aplants) {
+      const x = ap.x - camX;
+      if (x < -80 || x > W + 80) continue;
+      const m = MANIFEST[ap.s];
+      drawSheet(ap.s, ((t * 12 + ap.ph * 3) | 0) % m.frames, x, ap.y - camY + 2);
+    }
+    /* ядовитые цветы */
+    for (const po of L.poisons) {
+      const x = po.x - camX;
+      if (x < -90 || x > W + 90) continue;
+      const m = MANIFEST.plant_poison;
+      drawSheet('plant_poison', ((t * 13 + po.ph) | 0) % m.frames, x, po.y - camY + 2);
+    }
+    /* батуты */
+    for (const tr of this.tramps) {
+      const x = tr.x - camX;
+      if (x < -80 || x > W + 80) continue;
+      const fr = tr.t >= 0 ? Math.min(19, (tr.t * 40) | 0) : 0;
+      drawSheet('plant_jump', fr, x, tr.y - camY + 2);
+    }
+    /* цветы-чекпоинты */
+    for (const cp of this.checkpoints) {
+      const x = cp.x - camX;
+      if (x < -90 || x > W + 90) continue;
+      const m = MANIFEST.blueflower;
+      ctx.shadowColor = '#7fd4ff';
+      ctx.shadowBlur = cp.on ? 20 + Math.sin(t * 3) * 8 : 6;
+      drawSheet('blueflower', ((t * 13 + cp.ph * 4) | 0) % m.frames, x, cp.y - camY + 2, false, cp.on ? 1 : 0.85);
+      ctx.shadowBlur = 0;
+      if (cp.on && Math.random() < 0.06) {
+        spawnP(cp.x + (Math.random() - .5) * 50, cp.y - 60 - Math.random() * 50,
+          { vx: 0, vy: -30, col: '#8fd8ff', life: 1, size: 2, glow: true });
+      }
     }
 
     /* подсказки */
@@ -1014,7 +1097,7 @@ const UI = {
     box.appendChild(g);
     const tips = document.createElement('p');
     tips.style.marginTop = '22px'; tips.style.fontSize = '17px';
-    tips.innerHTML = 'Зелёных слаймов можно топтать сверху.<br>Оранжевые — колючие: только рывок!<br>Собери все осколки Сердца и войди в портал.';
+    tips.innerHTML = 'Зелёных слаймов можно топтать сверху.<br>Оранжевые — колючие: только рывок!<br>Синие цветы — чекпоинты, прыгучие растения — батуты.<br>Собери все осколки Сердца и войди в портал.';
     box.appendChild(tips);
     p.appendChild(box);
     p.appendChild(this.btn('Назад', () => this.showMenu()));
@@ -1057,10 +1140,11 @@ const UI = {
     s.className = 'storyBox';
     s.textContent = 'Но пока жив хранитель — жива и надежда.';
     const btns = document.createElement('div'); btns.className = 'menuBtns';
-    btns.appendChild(this.btn('Попробовать снова', () => {
+    btns.appendChild(this.btn('Возродиться у цветка', () => game.reviveAtCheckpoint()));
+    btns.appendChild(this.btn('Заново уровень', () => {
       game.buildLevel(game.levelIndex);
       game.state = 'play'; this.clear();
-    }));
+    }, 'ghost'));
     btns.appendChild(this.btn('В меню', () => this.showMenu(), 'ghost small'));
     p.append(m, s, btns);
   },
