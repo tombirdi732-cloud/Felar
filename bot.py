@@ -3,17 +3,17 @@
 Discord-бот модерации медиа.
 
 Следит за отправкой изображений, GIF и других картинок в каналах сервера.
-Каждое изображение анализируется vision-моделью Claude. Если на нём
-обнаружена политика или другой запрещённый контент — сообщение удаляется,
-а автору выдаётся предупреждение. После достижения лимита предупреждений
-пользователь получает таймаут.
+Каждое изображение анализируется локальной бесплатной нейросетью CLIP
+(без API-ключей и оплаты). Если на нём обнаружена политика или другой
+запрещённый контент — сообщение удаляется, а автору выдаётся
+предупреждение. После достижения лимита предупреждений пользователь
+получает таймаут.
 
 Запуск:
-    DISCORD_TOKEN=... ANTHROPIC_API_KEY=... python bot.py
+    DISCORD_TOKEN=... python bot.py
 """
 
 import asyncio
-import base64
 import json
 import logging
 import os
@@ -23,7 +23,8 @@ from pathlib import Path
 
 import aiohttp
 import discord
-from anthropic import AsyncAnthropic, APIStatusError, APIConnectionError
+
+from classifier import MediaClassifier
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,20 +36,70 @@ BASE_DIR = Path(__file__).parent
 CONFIG_PATH = BASE_DIR / "config.json"
 WARNINGS_PATH = BASE_DIR / "warnings.json"
 
+# Промпты для CLIP пишутся по-английски — так модель работает точнее.
 DEFAULT_CONFIG = {
     "categories": {
-        "politics": "Политика: политики, политические лозунги, партийная символика, протесты, пропаганда, военно-политическая агитация",
-        "nsfw": "NSFW: обнажённое тело, порнография, откровенно сексуальный контент",
-        "violence": "Жестокость: кровь, расчленение, издевательства, реальное насилие",
-        "extremism": "Экстремизм: нацистская и террористическая символика, призывы к насилию",
-        "drugs": "Наркотики: изображение и пропаганда наркотических веществ"
+        "politics": {
+            "label": "Политика",
+            "prompts": [
+                "a photo of a politician giving a speech",
+                "a political protest or rally with signs and flags",
+                "political propaganda poster",
+                "a political party symbol or campaign banner",
+                "military political agitation poster",
+            ],
+        },
+        "nsfw": {
+            "label": "NSFW",
+            "prompts": [
+                "an explicit pornographic image",
+                "a photo of a naked person",
+                "sexually explicit content",
+            ],
+        },
+        "violence": {
+            "label": "Жестокость",
+            "prompts": [
+                "a gory violent photo with blood",
+                "a photo of a person being beaten or tortured",
+                "graphic violence or mutilation",
+            ],
+        },
+        "extremism": {
+            "label": "Экстремизм",
+            "prompts": [
+                "nazi symbols like swastika flag",
+                "terrorist propaganda image",
+                "extremist symbols and insignia",
+            ],
+        },
+        "drugs": {
+            "label": "Наркотики",
+            "prompts": [
+                "a photo of illegal drugs like pills, powder or syringes",
+                "drug use or drug paraphernalia",
+            ],
+        },
     },
+    "safe_prompts": [
+        "a funny internet meme",
+        "an anime or cartoon illustration",
+        "a video game screenshot",
+        "a photo of a pet or animal",
+        "a landscape or nature photo",
+        "a selfie or a photo of friends",
+        "a screenshot of a chat or a computer program",
+        "a photo of food",
+        "a reaction gif of a person or character",
+        "a sports photo",
+    ],
+    "threshold": 0.5,
     "max_warnings": 3,
     "timeout_minutes": 60,
     "delete_notice_seconds": 15,
     "ignore_moderators": True,
     "log_channel_id": None,
-    "max_file_size_mb": 10
+    "max_file_size_mb": 10,
 }
 
 ALLOWED_MEDIA_TYPES = {
@@ -65,18 +116,6 @@ IMAGE_URL_RE = re.compile(
 GIF_HOST_RE = re.compile(
     r"https?://(?:\w+\.)?(?:tenor\.com|giphy\.com|gfycat\.com)/\S+", re.IGNORECASE
 )
-
-VERDICT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "violation": {"type": "boolean"},
-        "category": {"type": ["string", "null"]},
-        "reason": {"type": "string"},
-    },
-    "required": ["violation", "category", "reason"],
-    "additionalProperties": False,
-}
-
 
 def load_config() -> dict:
     if CONFIG_PATH.exists():
@@ -129,7 +168,11 @@ class MediaModBot(discord.Client):
 
         self.config = config
         self.warnings = WarningStore(WARNINGS_PATH)
-        self.anthropic = AsyncAnthropic()
+        self.classifier = MediaClassifier(
+            categories=config["categories"],
+            safe_prompts=config["safe_prompts"],
+            threshold=float(config.get("threshold", 0.5)),
+        )
         self.http_session: aiohttp.ClientSession | None = None
         # Сообщения, которые уже проверены/удалены — чтобы не проверять
         # дважды при появлении embed'ов через on_message_edit.
@@ -230,8 +273,14 @@ class MediaModBot(discord.Client):
         data = await self._download(url)
         if data is None:
             return None
-        media_bytes, media_type = data
-        return await self._analyze_image(media_bytes, media_type)
+        media_bytes, _media_type = data
+        # Инференс блокирующий — уводим в отдельный поток,
+        # чтобы не подвешивать event loop бота.
+        try:
+            return await asyncio.to_thread(self.classifier.classify, media_bytes)
+        except Exception:
+            log.exception("Ошибка классификации %s", url)
+            return None
 
     async def _download(self, url: str) -> tuple[bytes, str] | None:
         max_bytes = int(self.config.get("max_file_size_mb", 10)) * 1024 * 1024
@@ -263,71 +312,11 @@ class MediaModBot(discord.Client):
             log.warning("Не удалось скачать %s: %s", url, e)
             return None
 
-    async def _analyze_image(self, data: bytes, media_type: str) -> dict | None:
-        categories = self.config["categories"]
-        category_list = "\n".join(f"- {key}: {desc}" for key, desc in categories.items())
-        system = (
-            "Ты — модератор изображений Discord-сервера. Тебе дают картинку или кадр GIF. "
-            "Определи, нарушает ли она правила. Запрещённые категории:\n"
-            f"{category_list}\n\n"
-            "Отвечай строго в JSON. violation=true только если нарушение очевидно "
-            "и относится к одной из категорий. Обычные мемы, игры, аниме и юмор без "
-            "запрещённого содержания — не нарушение. category — ключ категории "
-            f"({', '.join(categories.keys())}) или null. reason — краткое объяснение по-русски."
-        )
-        b64 = base64.standard_b64encode(data).decode("utf-8")
-        try:
-            response = await self.anthropic.messages.create(
-                model="claude-opus-4-8",
-                max_tokens=512,
-                system=[{
-                    "type": "text",
-                    "text": system,
-                    "cache_control": {"type": "ephemeral"},
-                }],
-                output_config={"format": {"type": "json_schema", "schema": VERDICT_SCHEMA}},
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": b64,
-                            },
-                        },
-                        {"type": "text", "text": "Проверь это изображение."},
-                    ],
-                }],
-            )
-        except APIConnectionError as e:
-            log.error("Нет связи с Anthropic API: %s", e)
-            return None
-        except APIStatusError as e:
-            log.error("Ошибка Anthropic API %s: %s", e.status_code, e.message)
-            return None
-
-        if response.stop_reason == "refusal":
-            # Классификатор отказался — считаем это подозрительным контентом.
-            return {
-                "violation": True,
-                "category": "nsfw",
-                "reason": "Модель отказалась анализировать контент (высокорисковый материал).",
-            }
-
-        text = next((b.text for b in response.content if b.type == "text"), None)
-        if not text:
-            return None
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            log.error("Не удалось разобрать ответ модели: %r", text)
-            return None
-
     async def _punish(self, message: discord.Message, verdict: dict):
         cfg = self.config
-        category = verdict.get("category") or "запрещённый контент"
+        cat_key = verdict.get("category")
+        cat_cfg = cfg["categories"].get(cat_key, {}) if cat_key else {}
+        category = cat_cfg.get("label", cat_key) or "запрещённый контент"
         reason = verdict.get("reason", "")
         author = message.author
 
@@ -414,8 +403,6 @@ def main():
     token = os.environ.get("DISCORD_TOKEN")
     if not token:
         raise SystemExit("Не задан DISCORD_TOKEN (переменная окружения)")
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("Не задан ANTHROPIC_API_KEY (переменная окружения)")
 
     config = load_config()
     bot = MediaModBot(config)

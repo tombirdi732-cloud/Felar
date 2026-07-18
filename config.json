@@ -1,11 +1,60 @@
 {
   "categories": {
-    "politics": "Политика: политики, политические лозунги, партийная символика, протесты, пропаганда, военно-политическая агитация",
-    "nsfw": "NSFW: обнажённое тело, порнография, откровенно сексуальный контент",
-    "violence": "Жестокость: кровь, расчленение, издевательства, реальное насилие",
-    "extremism": "Экстремизм: нацистская и террористическая символика, призывы к насилию",
-    "drugs": "Наркотики: изображение и пропаганда наркотических веществ"
+    "politics": {
+      "label": "Политика",
+      "prompts": [
+        "a photo of a politician giving a speech",
+        "a political protest or rally with signs and flags",
+        "political propaganda poster",
+        "a political party symbol or campaign banner",
+        "military political agitation poster"
+      ]
+    },
+    "nsfw": {
+      "label": "NSFW",
+      "prompts": [
+        "an explicit pornographic image",
+        "a photo of a naked person",
+        "sexually explicit content"
+      ]
+    },
+    "violence": {
+      "label": "Жестокость",
+      "prompts": [
+        "a gory violent photo with blood",
+        "a photo of a person being beaten or tortured",
+        "graphic violence or mutilation"
+      ]
+    },
+    "extremism": {
+      "label": "Экстремизм",
+      "prompts": [
+        "nazi symbols like swastika flag",
+        "terrorist propaganda image",
+        "extremist symbols and insignia"
+      ]
+    },
+    "drugs": {
+      "label": "Наркотики",
+      "prompts": [
+        "a photo of illegal drugs like pills, powder or syringes",
+        "drug use or drug paraphernalia"
+      ]
+    }
   },
+  "safe_prompts": [
+    "a funny internet meme",
+    "an anime or cartoon illustration",
+    "a video game screenshot",
+    "a photo of a pet or animal",
+    "a landscape or nature photo",
+    "a selfie or a photo of friends",
+    "a screenshot of a chat or a computer program",
+    "a photo of food",
+    "a reaction gif of a person or character",
+    "a sports photo"
+  ],
+  "threshold": 0.5,
   "max_warnings": 3,
   "timeout_minutes": 60,
   "delete_notice_seconds": 15,
