@@ -15,7 +15,10 @@ export async function createSession(userId: string): Promise<void> {
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Secure-флаг привязан к протоколу сайта, а не к NODE_ENV: на боевом
+    // сервере без SSL (доступ по http://IP) браузер не сохраняет
+    // Secure-куки, и сессия «слетает» после каждого входа.
+    secure: (process.env.NEXT_PUBLIC_SITE_URL || "").startsWith("https"),
     expires: expiresAt,
     path: "/",
   });
