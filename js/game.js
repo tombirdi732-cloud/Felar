@@ -23,24 +23,45 @@ const IMG = {};
 let MANIFEST = {};
 
 function loadAssets() {
-  return fetch('assets/manifest.json')
-    .then(r => r.json())
-    .then(man => {
-      MANIFEST = man;
-      const names = Object.keys(man);
-      let done = 0;
-      return new Promise(resolve => {
-        names.forEach(n => {
-          const im = new Image();
-          im.onload = im.onerror = () => {
-            IMG[n] = im;
-            drawLoadBar(++done / names.length);
-            if (done === names.length) resolve();
-          };
-          im.src = `assets/${n}.png`;
-        });
-      });
+  // Манифест вшит в js/manifest.js, чтобы игра работала и с file:// (без сервера)
+  MANIFEST = typeof MANIFEST_DATA !== 'undefined' ? MANIFEST_DATA : null;
+  if (!MANIFEST) {
+    return fetch('assets/manifest.json').then(r => r.json()).then(m => { MANIFEST = m; return loadImages(); });
+  }
+  return loadImages();
+}
+
+function loadImages() {
+  const names = Object.keys(MANIFEST);
+  let done = 0, failed = 0;
+  return new Promise(resolve => {
+    names.forEach(n => {
+      const im = new Image();
+      im.onload = () => { IMG[n] = im; step(); };
+      im.onerror = () => { IMG[n] = im; failed++; step(); };
+      im.src = `assets/${n}.png`;
     });
+    function step() {
+      drawLoadBar(++done / names.length);
+      if (done === names.length) {
+        if (failed > 0) drawLoadError(failed);
+        else resolve();
+      }
+    }
+  });
+}
+
+function drawLoadError(failed) {
+  ctx.fillStyle = '#0b1d16';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#ffb4a8';
+  ctx.font = '18px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Не загрузились файлы игры (${failed} шт.)`, W / 2, H / 2 - 30);
+  ctx.fillStyle = '#cdeeda';
+  ctx.font = '15px Georgia';
+  ctx.fillText('Проверь, что архив распакован полностью и папка assets', W / 2, H / 2 + 4);
+  ctx.fillText('лежит рядом с index.html.', W / 2, H / 2 + 26);
 }
 
 function drawLoadBar(p) {
