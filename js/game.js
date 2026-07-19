@@ -377,6 +377,7 @@ const game = {
       L.vines.push({ s, x: x - m.w / 2, y: ty, ph: Math.random() * 6 });
     }
     L.aplants = (data.aplants || []).map(([s, x, by]) => ({ s, x, y: by, ph: Math.random() * 6 }));
+    L.speeches = (data.speeches || []).map(o => ({ x: o.x, text: o.text, done: false }));
     L.poisons = (data.poisons || []).map(([x, by]) => {
       const m = MANIFEST.plant_poison;
       L.hazards.push({ x: x - m.fw * 0.30, y: by - m.fh * 0.66, w: m.fw * 0.60, h: m.fh * 0.62 });
@@ -415,6 +416,12 @@ const game = {
     this.tramps = (data.tramps || []).map(([x, y]) => ({ x, y, t: -1 }));
     this.checkpoints = (data.checkpoints || []).map(([x, y]) => ({ x, y, on: false, ph: Math.random() * 6 }));
     this.checkpoint = { x: data.start.x, y: data.start.y };
+    this.boss = data.boss ? {
+      x: data.boss[0], y: data.boss[1], floorY: data.boss[1],
+      hp: 8, maxHp: 8, state: 'idle', t: -1.5, vx: 0, vy: 0,
+      face: -1, inv: 0, hops: 0, deadT: 0, animT: 0, spawned: {},
+    } : null;
+    this.bubble = null;
     this.camX = clamp(data.start.x - W / 2, 0, data.width - W);
     this.camY = 0;
     particles = [];
@@ -507,10 +514,81 @@ const game = {
         this.showStory(STORY.victory, () => UI.showVictory());
       } else {
         localStorage.setItem('felar_progress', String(next));
-        const key = next === 1 ? 'level2' : 'level3';
-        this.showStory(STORY[key], () => this.startLevel(next));
+        const pages = STORY.between[next];
+        if (pages) this.showStory(pages, () => this.startLevel(next));
+        else this.startLevel(next);
       }
     });
+  },
+
+  /* ---------- Босс: Король слаймов ---------- */
+  updateBoss(dt) {
+    const b = this.boss, p = this.player;
+    b.inv = Math.max(0, b.inv - dt);
+    b.animT += dt;
+    b.t += dt;
+    if (b.state === 'idle') {
+      b.face = p.x < b.x ? -1 : 1;
+      if (b.t > 0.75) {
+        b.state = 'hop'; b.t = 0;
+        const big = b.hops % 3 === 2;
+        b.vy = big ? -1000 : -640;
+        b.vx = clamp((p.x - b.x) * (big ? 1.1 : 0.8), -430, 430);
+        SND.blip(110, 0.25, 'sine', 0.16, 70);
+      }
+    } else if (b.state === 'hop') {
+      b.vy += 2000 * dt;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      b.x = clamp(b.x, 330, this.level.width - 330);
+      if (b.vy > 0 && b.y >= b.floorY) {
+        b.y = b.floorY; b.state = 'land'; b.t = 0; b.hops++;
+        this.shake = 0.5;
+        SND.sStomp();
+        burst(b.x, b.y, 24, { col: '#ffb74d', speed: 280, life: 0.5, grav: 500 });
+        if (p.onGround && p.inv <= 0 && Math.abs(p.x - b.x) < 195) this.hurt(b.x);
+        /* на 5 и 2 HP Король зовёт подмогу */
+        if ((b.hp === 5 || b.hp === 2) && !b.spawned[b.hp]) {
+          b.spawned[b.hp] = true;
+          for (const dx of [-220, 220]) {
+            this.slimes.push({
+              x: b.x + dx, y: b.floorY, type: 'g',
+              x0: 340, x1: this.level.width - 340,
+              vx: 70 * Math.sign(dx || 1), animT: Math.random() * 2, dead: 0,
+            });
+          }
+        }
+      }
+    } else if (b.state === 'land') {
+      if (b.t > 0.4) { b.state = 'idle'; b.t = 0; }
+    }
+    /* контакт с героем */
+    const bb = { x: b.x - 95, y: b.y - 140, w: 190, h: 140 };
+    const pbox = { x: p.x - p.w / 2, y: p.y - p.h, w: p.w, h: p.h };
+    if (aabb(pbox, bb)) {
+      if (p.dashT > 0) {
+        if (b.inv <= 0) {
+          b.hp--; b.inv = 1.1;
+          SND.sPop(); this.shake = 0.3;
+          burst(b.x, b.y - 70, 18, { col: '#ffd54f', speed: 240, life: 0.5 });
+          p.dashT = 0; p.dashCd = 0.5;
+          p.vx = (p.x < b.x ? -1 : 1) * 430; p.vy = -350;
+          if (b.hp <= 0) this.killBoss();
+        }
+      } else if (p.vy > 140 && p.y - (b.y - 140) < 60) {
+        p.vy = -620; p.squash = 0.3; SND.sStomp(); // отскок от макушки, урона нет
+      } else {
+        this.hurt(b.x);
+      }
+    }
+  },
+  killBoss() {
+    const b = this.boss;
+    SND.sDoor();
+    this.shake = 0.6;
+    burst(b.x, b.y - 80, 60, { col: '#ffb74d', speed: 420, life: 0.9, grav: 300 });
+    burst(b.x, b.y - 80, 30, { col: '#8ff0ff', speed: 300, life: 1.1, glow: true });
+    this.banner = { text: 'Король побеждён!', t: 0 };
+    this.bubble = { text: 'Осколок! Наконец-то… держись, Сердце.', t: 0 };
   },
 
   /* ---------- Обновление ---------- */
@@ -655,6 +733,25 @@ const game = {
       }
     }
 
+    /* реплики героя */
+    for (const sp of L.speeches) {
+      if (!sp.done && Math.abs(p.x - sp.x) < 70) {
+        sp.done = true;
+        this.bubble = { text: sp.text, t: 0 };
+      }
+    }
+    if (this.bubble) {
+      this.bubble.t += dt;
+      if (this.bubble.t > 3.6) this.bubble = null;
+    }
+
+    /* босс */
+    if (this.boss) {
+      if (this.boss.hp > 0) this.updateBoss(dt);
+      else if (this.boss.deadT < 1.2) this.boss.deadT += dt;
+      if (this.state !== 'play') return;
+    }
+
     /* --- слаймы --- */
     for (const s of this.slimes) {
       if (s.dead > 0) { s.dead += dt; continue; }
@@ -710,14 +807,15 @@ const game = {
     /* --- портал --- */
     const portal = L.portal;
     portal.t += dt;
-    portal.active = this.gems.every(g => g.taken);
+    portal.active = this.gems.every(g => g.taken) && (!this.boss || this.boss.hp <= 0);
     if (portal.active && Math.abs(p.x - portal.x) < 44 && Math.abs(p.y - portal.y) < 90 && this.fadeDir === 0) {
       this.totalGems += this.gems.length;
       this.levelComplete();
     }
 
-    /* --- камера --- */
-    const tx = clamp(p.x - W / 2, 0, L.width - W);
+    /* --- камера (в бою с Королём держит его в кадре) --- */
+    const focusX = this.boss && this.boss.hp > 0 ? lerp(p.x, this.boss.x, 0.38) : p.x;
+    const tx = clamp(focusX - W / 2, 0, L.width - W);
     const ty = clamp(p.y - H * 0.62, -140, 60);
     this.camX = lerp(this.camX, tx, 1 - Math.pow(0.0012, dt));
     this.camY = lerp(this.camY, ty, 1 - Math.pow(0.004, dt));
@@ -847,6 +945,9 @@ const game = {
       ctx.fillStyle = '#0a1a12';
       ctx.beginPath(); ctx.roundRect(x - wMax / 2, y - hBox / 2, wMax, hBox, 9); ctx.fill();
       ctx.strokeStyle = 'rgba(140,220,170,.35)'; ctx.stroke();
+      ctx.beginPath();          // стрелка-указатель вниз
+      ctx.moveTo(x - 7, y + hBox / 2); ctx.lineTo(x + 7, y + hBox / 2); ctx.lineTo(x, y + hBox / 2 + 10);
+      ctx.closePath(); ctx.fill();
       ctx.globalAlpha = 0.95;
       ctx.fillStyle = '#cdeeda';
       lines.forEach((l, i) => ctx.fillText(l, x, y - hBox / 2 + 24 + i * 20));
@@ -871,6 +972,25 @@ const game = {
       ctx.shadowBlur = 0;
     }
 
+    /* мягкие тени под существами */
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    for (const s of this.slimes) {
+      if (s.dead > 0) continue;
+      ctx.beginPath();
+      ctx.ellipse(s.x - camX, s.y - camY + 6, s.type === 'o' ? 42 : 32, 7, 0, 0, 7);
+      ctx.fill();
+    }
+    if (this.player.onGround) {
+      ctx.beginPath();
+      ctx.ellipse(this.player.x - camX, this.player.y - camY + 6, 26, 6, 0, 0, 7);
+      ctx.fill();
+    }
+    if (this.boss && this.boss.hp > 0) {
+      ctx.beginPath();
+      ctx.ellipse(this.boss.x - camX, this.boss.floorY - camY + 8, 95, 14, 0, 0, 7);
+      ctx.fill();
+    }
+
     /* слаймы */
     for (const s of this.slimes) {
       const name = s.type === 'o' ? 'slime_orange' : 'slime_green';
@@ -890,8 +1010,14 @@ const game = {
       }
     }
 
+    /* босс */
+    if (this.boss && (this.boss.hp > 0 || this.boss.deadT < 1.1)) this.drawBoss(camX, camY);
+
     /* герой */
     this.drawPlayer(camX, camY);
+
+    /* реплика героя */
+    if (this.bubble) this.drawBubble(camX, camY);
 
     drawParticles(camX, camY);
     drawFireflies(t, camX, camY, 1);
@@ -901,6 +1027,21 @@ const game = {
     vg.addColorStop(0, 'rgba(0,0,0,0)');
     vg.addColorStop(1, 'rgba(2,8,5,0.55)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+    /* полоса здоровья Короля */
+    if (this.boss && this.boss.hp > 0) {
+      const b = this.boss;
+      const bw = 320, bx = W / 2 - bw / 2, by = 58;
+      ctx.fillStyle = 'rgba(6,16,12,.6)';
+      ctx.beginPath(); ctx.roundRect(bx - 4, by - 4, bw + 8, 22, 8); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,183,77,.5)'; ctx.stroke();
+      ctx.fillStyle = '#e2903a';
+      ctx.beginPath(); ctx.roundRect(bx, by, bw * (b.hp / b.maxHp), 14, 5); ctx.fill();
+      ctx.fillStyle = '#ffe1b0';
+      ctx.font = '13px Georgia';
+      ctx.textAlign = 'center';
+      ctx.fillText('Король слаймов', W / 2, by - 10);
+    }
 
     /* баннер уровня */
     if (this.banner) {
@@ -925,8 +1066,8 @@ const game = {
   drawSky() {
     const g = ctx.createLinearGradient(0, 0, 0, H);
     const idx = this.level ? this.levelIndex : 0;
-    const tops = ['#123227', '#0f2c26', '#0c2020'];
-    const mids = ['#1b4a36', '#173f38', '#122e2c'];
+    const tops = ['#123227', '#0f2c26', '#0a1c26', '#0c2020', '#1c1a14'];
+    const mids = ['#1b4a36', '#173f38', '#0f2e3c', '#122e2c', '#33301c'];
     g.addColorStop(0, tops[idx] || tops[0]);
     g.addColorStop(0.55, mids[idx] || mids[0]);
     g.addColorStop(1, '#071510');
@@ -973,7 +1114,10 @@ const game = {
       ctx.font = '13px Georgia';
       ctx.textAlign = 'center';
       ctx.fillStyle = 'rgba(190,235,205,0.55)';
-      ctx.fillText(`ещё ${left} оскол${left === 1 ? 'ок' : left < 5 ? 'ка' : 'ков'}`, x, y - 64);
+      const msg = left > 0
+        ? `ещё ${left} оскол${left === 1 ? 'ок' : left < 5 ? 'ка' : 'ков'}`
+        : 'осколок всё ещё у Короля';
+      ctx.fillText(msg, x, y - 64);
     }
   },
 
@@ -1003,6 +1147,58 @@ const game = {
     const m = MANIFEST[name];
     ctx.drawImage(IMG[name], frame * m.fw, 0, m.fw, m.fh, -m.fw / 2, -m140, m.fw, m.fh);
     ctx.restore();
+  },
+
+  drawBoss(camX, camY) {
+    const b = this.boss;
+    const m = MANIFEST.slime_orange;
+    const fr = ((b.animT * 18) | 0) % m.frames;
+    let sx = 2.7, sy = 2.7;
+    if (b.state === 'hop') { sx = 2.45; sy = 3.0; }
+    else if (b.state === 'land' && b.t < 0.2) { sx = 3.1; sy = 2.25; }
+    if (b.hp <= 0) {
+      const k = 1 - b.deadT / 1.1;
+      sx *= 1 + (1 - k) * 0.6; sy *= Math.max(0.05, k);
+      ctx.globalAlpha = Math.max(0, k);
+    } else if (b.inv > 0 && ((b.inv * 14) | 0) % 2 === 0) {
+      ctx.globalAlpha = 0.45;
+    }
+    ctx.save();
+    ctx.translate(b.x - camX, b.y - camY + 6);
+    ctx.scale(b.face > 0 ? sx : -sx, sy);
+    ctx.drawImage(IMG.slime_orange, fr * m.fw, 0, m.fw, m.fh, -m.fw / 2, -m.fh, m.fw, m.fh);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    /* осколок мерцает внутри Короля */
+    if (b.hp > 0) {
+      ctx.shadowColor = '#ffd54f'; ctx.shadowBlur = 14;
+      ctx.globalAlpha = 0.75 + 0.25 * Math.sin(b.animT * 5);
+      ctx.drawImage(IMG.ic_gem_amber, b.x - camX - 13, b.y - camY - 110, 26, 26);
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    }
+  },
+
+  drawBubble(camX, camY) {
+    const p = this.player, bu = this.bubble;
+    const a = bu.t < 0.25 ? bu.t / 0.25 : bu.t > 3.1 ? Math.max(0, 1 - (bu.t - 3.1) / 0.5) : 1;
+    ctx.font = '15px Georgia';
+    ctx.textAlign = 'center';
+    const tw = ctx.measureText(bu.text).width + 26;
+    const bx = clamp(p.x - camX, tw / 2 + 8, W - tw / 2 - 8);
+    const by = clamp(p.y - camY - 175, 40, H - 60);
+    ctx.globalAlpha = 0.88 * a;
+    ctx.fillStyle = '#0d211a';
+    ctx.beginPath(); ctx.roundRect(bx - tw / 2, by - 17, tw, 30, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(140,220,170,.5)'; ctx.stroke();
+    /* хвостик к герою */
+    ctx.beginPath();
+    ctx.moveTo(bx - 6, by + 13); ctx.lineTo(bx + 6, by + 13);
+    ctx.lineTo(clamp(p.x - camX, bx - 20, bx + 20), by + 24);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#d9f2e2';
+    ctx.fillText(bu.text, bx, by + 4);
+    ctx.globalAlpha = 1;
   },
 
   /* ---------- Сцена меню ---------- */
@@ -1198,6 +1394,7 @@ const UI = {
     [...hearts.children].forEach((im, i) => im.classList.toggle('lost', i >= hp));
     const taken = game.gems.filter(g => g.taken).length;
     document.getElementById('gemCount').textContent = `${taken}/${game.gems.length}`;
+    document.getElementById('gems').style.display = game.gems.length ? '' : 'none';
   },
   setDashCd(k) {
     document.getElementById('dashCd').style.setProperty('--cd', `${Math.round(k * 100)}%`);
