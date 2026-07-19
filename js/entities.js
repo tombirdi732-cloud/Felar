@@ -115,6 +115,10 @@ class Player {
     // --- движение и коллизии с тайлами ---
     this.wasOnGround = this.onGround;
     this.moveAndCollide(dt, level);
+    if (this.carrier) { // перенос движущейся платформой
+      this.x += this.carrier.dx;
+      this.y += this.carrier.dy;
+    }
 
     if (this.onGround) {
       this.jumps = 0;
@@ -171,6 +175,19 @@ class Player {
           this.y = t.y - this.h;
           this.vy = 0;
           this.onGround = true;
+        }
+      }
+      // движущиеся платформы: опора должна быть известна ДО выбора
+      // анимации, иначе на платформе включается поза падения
+      if (typeof G !== "undefined" && G.platforms) {
+        for (const mp of G.platforms) {
+          if (r.x < mp.x + mp.w && r.x + r.w > mp.x &&
+              this.bottom >= mp.y - 2 && this.bottom <= mp.y + 16) {
+            this.y = mp.y - this.h;
+            this.vy = 0;
+            this.onGround = true;
+            this.carrier = mp;
+          }
         }
       }
     }

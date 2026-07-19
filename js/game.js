@@ -132,25 +132,6 @@ function updatePlay(dt) {
   for (const mp of G.platforms) mp.update(dt);
   p.update(dt, lvl);
 
-  // посадка на движущиеся платформы + перенос
-  if (p.vy >= 0 && !p.dead) {
-    for (const mp of G.platforms) {
-      const r = p.rect;
-      if (r.x < mp.x + mp.w && r.x + r.w > mp.x &&
-          p.bottom >= mp.y - 2 && p.bottom <= mp.y + 16) {
-        p.y = mp.y - p.h;
-        p.vy = 0;
-        p.onGround = true;
-        // платформа = земля: сброс прыжков, рывка и время койота
-        p.jumps = 0;
-        p.airDashUsed = false;
-        p.coyote = PHYS.coyote;
-        p.x += mp.dx;
-        p.y += mp.dy;
-      }
-    }
-  }
-
   G.moth.update(dt, p, false);
   for (const e of G.enemies) e.update(dt, lvl);
   for (const f of G.flyers) f.update(dt);
