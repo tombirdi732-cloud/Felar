@@ -1,0 +1,22 @@
+; Проект ИСКРА — Godot 4.3
+; Открой эту папку в Godot (Import -> выбери project.godot)
+
+config_version=5
+
+[application]
+
+config/name="ISKRA — сказка об угасшем свете"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
