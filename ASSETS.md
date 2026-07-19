@@ -1,233 +1,180 @@
 # ИСКРА — спецификация и промты ассетов
 
 Игра уже играбельна на процедурных плейсхолдерах. Чтобы подключить настоящую
-графику, просто положи PNG-файл по указанному пути — код сам подхватит его
-вместо плейсхолдера (ничего перекомпилировать не нужно, просто обнови страницу).
+графику, положи PNG по указанному пути — код сам подхватит его вместо
+плейсхолдера (просто обнови страницу).
+
+**Рабочий процесс:** генераторы плохо делают целый спрайт-лист сразу,
+поэтому генерируем **одну анимацию = одна картинка** (ряд кадров), а сборкой
+листов занимается Клод: присылай ему результаты в любом виде (полоса, сетка,
+отдельные кадры, неровные кадры) — он нарежет, выровняет и соберёт.
 
 ---
 
-## 0. Общий стиль (добавляй к каждому промту)
+## 0. Формула промта
 
-**Базовый стиль-промт (EN):**
-> hand-painted 2D game art, dark fairy-tale atmosphere, soft rim lighting,
-> glowing warm accents on cool desaturated background, style of Hollow Knight
-> and Ori and the Blind Forest, clean silhouette, transparent background, PNG
+Каждый промт = **ОПИСАНИЕ + ФРАЗА АНИМАЦИИ + СТИЛЬ** (склеить через запятую).
 
-**По-русски:** рисованная 2D-графика, тёмная сказка, мягкий контурный свет,
-тёплые светящиеся акценты на холодном приглушённом фоне, чистый читаемый
-силуэт, прозрачный фон.
+**СТИЛЬ — общий хвост для всех спрайтов:**
 
-**Технические требования ко всем спрайтам:**
-- PNG с прозрачностью (RGBA).
-- Спрайт-лист — сетка: **каждая строка = одна анимация** (в порядке из таблицы),
-  **каждый столбец = кадр**. Размер кадра фиксированный для файла.
-- Ширина файла = (макс. число кадров) × (ширина кадра); высота = (число анимаций) × (высота кадра).
-- Персонаж смотрит **вправо** (отзеркаливание влево делает движок).
-- Точка опоры — низ кадра по центру (персонаж «стоит» на нижней границе кадра).
-- Если генератор не умеет спрайт-листы: генерируй кадры по одному
-  (промт + «frame N of M, animation: run cycle»), потом склей в сетку
-  (например, в Aseprite / Photoshop / любым скриптом).
+```
+hand-painted 2D game art, dark fairy-tale atmosphere, soft rim lighting, style of Hollow Knight and Ori and the Blind Forest, clean silhouette, all frames identical in size and evenly spaced in one horizontal row, transparent background
+```
 
----
+Ключевые слова, которые заставляют генератор делать НЕСКОЛЬКО кадров:
+`sprite sheet`, `N frames ... in a single horizontal row`,
+`the exact same character in every frame`,
+`identical size and position in each frame`, `frame-by-frame animation`.
 
-## 1. Персонажи
-
-### 1.1 Люм — герой (`assets/sprites/lum.png`)
-Кадр **64×64**, максимум 8 кадров → файл **512×512** (8 строк).
-
-| Ряд | Анимация | Кадров | FPS | Что происходит |
-|----|-----------|--------|-----|----------------|
-| 0 | idle | 6 | 8 | дыхание, покачивание, моргание на последнем кадре |
-| 1 | run | 8 | 14 | цикл бега, шарф развевается |
-| 2 | jump | 4 | 12 | толчок вверх, вытягивание тела |
-| 3 | fall | 4 | 12 | падение, шарф вверх |
-| 4 | doublejump | 6 | 18 | сальто/оборот на 360° |
-| 5 | dash | 5 | 22 | рывок: тело вытянуто, линии скорости |
-| 6 | hurt | 4 | 12 | отшатывание, вспышка |
-| 7 | death | 8 | 10 | распадается на светящиеся искры |
-
-**Промт (EN):**
-> small forest spirit lantern-keeper character, tiny hooded figure in deep
-> teal cloak, pale glowing face with large dark eyes, orange scarf, holding a
-> tiny glowing ember light, cute but melancholic, 64x64 sprite, side view
-> facing right + базовый стиль
-
-### 1.2 Мотылёк — спутник (`assets/sprites/moth.png`)
-Кадр **32×32**, файл **192×64** (2 строки × 6 кадров).
-
-| Ряд | Анимация | Кадров | FPS |
-|----|-----------|--------|-----|
-| 0 | fly | 6 | 16 |
-| 1 | talk | 6 | 12 (крылья + искорки, «говорит») |
-
-**Промт (EN):**
-> tiny glowing moth companion spirit, soft cream-white wings with faint
-> golden dust, small lavender body, gentle warm glow, fairy-like, 32x32
-> sprite, side view + базовый стиль
+**Требования к результату:**
+- PNG с прозрачностью, персонаж смотрит **вправо**.
+- Одна картинка = один ряд кадров одной анимации.
+- Финальная раскладка листа (собирает Клод): строка = анимация в порядке из
+  таблиц ниже, столбец = кадр, точка опоры — низ кадра.
 
 ---
 
-## 2. Враги
+## 1. Люм — герой (`assets/sprites/lum.png`)
+Кадр **64×64**, итоговый файл **512×512** (8 строк). Нужно **8 генераций**.
 
-Все враги смотрят **вправо**, ряд 1 — всегда «squash» (раздавлен прыжком
-сверху: сплющивание + исчезновение).
+**ОПИСАНИЕ (одинаковое для всех 8):**
 
-### 2.1 Тенеросток — гл. 1 (`assets/sprites/sprout.png`)
-Кадр **48×48**, файл **288×96**. Ряд 0: walk (6 кадров, 10 fps, прыгучая
-походка с приседанием), ряд 1: squash (4 кадра, 14 fps).
+```
+small forest spirit lantern-keeper game character, tiny hooded figure in deep teal cloak, pale glowing face with large dark eyes, orange scarf, holding a tiny glowing golden ember, cute but melancholic, side view facing right
+```
 
-**Промт (EN):**
-> corrupted plant bulb monster, small onion-shaped dark green creature with
-> a single wilted leaf on top, glowing pale eyes, hopping walk, forest
-> shadow creature, 48x48 sprite + базовый стиль
+**ФРАЗЫ АНИМАЦИЙ:**
 
-### 2.2 Гранильщик — гл. 2 (`assets/sprites/crawler.png`)
-Кадр **48×48**, файл **288×96**. Ряд 0: walk (6, 12 fps, семенит ножками),
-ряд 1: squash (4, 14 fps).
-
-**Промт (EN):**
-> segmented cave beetle monster, three-part rounded violet carapace with
-> faint crystal shards growing on its back, many small legs, glowing pale
-> lavender eyes, 48x48 sprite + базовый стиль
-
-### 2.3 Каменный страж — гл. 3 (`assets/sprites/sentry.png`)
-Кадр **48×48**, файл **288×96**. Ряд 0: walk (6, 8 fps, тяжёлое
-покачивание), ряд 1: squash (4, 14 fps, трескается).
-
-**Промт (EN):**
-> small ancient stone golem sentinel, weathered grey-blue rock cube body
-> with glowing golden rune on its chest, slow heavy rocking walk, sky
-> citadel guardian, 48x48 sprite + базовый стиль
-
-### 2.4 Сумрачная мышь — гл. 1–2 (`assets/sprites/bat.png`)
-Кадр **32×32**, файл **128×64**. Ряд 0: fly (4, 14 fps, взмахи), ряд 1:
-squash (4, 14 fps).
-
-**Промт (EN):**
-> small shadow bat creature, dark purple round fluffy body, wide dusk-grey
-> wings, tiny amber glowing eyes, 32x32 sprite, flying + базовый стиль
-
-### 2.5 Грозовой огонёк — гл. 3 (`assets/sprites/wisp.png`)
-Кадр **32×32**, файл **192×64**. Ряд 0: fly (6, 12 fps, мерцание пламени),
-ряд 1: squash (4, 14 fps, гаснет).
-
-**Промт (EN):**
-> hostile storm wisp spirit, teardrop-shaped pale blue flame with white hot
-> core and small dark eyes, electric flicker, floating, 32x32 sprite + базовый стиль
+| Ряд | Анимация | FPS | Фраза |
+|---|---|---|---|
+| 0 | idle | 8 | `sprite sheet, 6 frames of idle animation in a single horizontal row, the exact same character in every frame, subtle breathing and swaying, blinking on the last frame` |
+| 1 | run | 14 | `sprite sheet, 8 frames of a full run cycle in a single horizontal row, the exact same character in every frame, legs mid-stride, scarf flowing behind` |
+| 2 | jump | 12 | `sprite sheet, 4 frames of a jump take-off in a single horizontal row, the exact same character, body stretching upward` |
+| 3 | fall | 12 | `sprite sheet, 4 frames of a falling pose in a single horizontal row, the exact same character, scarf flying upward` |
+| 4 | doublejump | 18 | `sprite sheet, 6 frames of a 360 degree mid-air somersault in a single horizontal row, the exact same character rotating step by step` |
+| 5 | dash | 22 | `sprite sheet, 5 frames of a fast horizontal dash in a single horizontal row, the exact same character, body stretched forward, speed lines` |
+| 6 | hurt | 12 | `sprite sheet, 4 frames of getting hit in a single horizontal row, the exact same character recoiling with eyes shut, brief white flash` |
+| 7 | death | 10 | `sprite sheet, 8 frames of dissolving into golden sparks in a single horizontal row, the exact same character gradually fading away` |
 
 ---
 
-## 3. Объекты
+## 2. Мотылёк — спутник (`assets/sprites/moth.png`)
+Кадр **32×32**, файл **192×64** (2 строки × 6). **2 генерации.**
 
-### 3.1 Осколок света (`assets/sprites/shard.png`)
-Кадр **32×32**, файл **256×32**. Ряд 0: spin (8, 12 fps) — вращение
-вокруг вертикальной оси (сужается и расширяется) + пульс свечения.
+**ОПИСАНИЕ:**
 
-**Промт (EN):**
-> glowing golden light shard crystal, small floating diamond-shaped star
-> fragment, warm amber glow with white core, collectible item, 32x32 sprite + базовый стиль
+```
+tiny glowing moth companion spirit, soft cream-white wings with golden dust, small lavender fuzzy body, gentle warm glow, fairy-like, flying, side view
+```
 
-### 3.2 Чекпоинт-фонарь (`assets/sprites/lantern.png`)
-Кадр **48×64**, файл **288×192** (3 строки × макс 6 кадров).
-
-| Ряд | Анимация | Кадров | FPS |
-|----|-----------|--------|-----|
-| 0 | off | 1 | — (потухший) |
-| 1 | ignite | 6 | 14 (разгорается) |
-| 2 | on | 6 | 8 (горит, пламя колышется) |
-
-**Промт (EN):**
-> old iron lantern post, dark forged metal street lamp with glass cage,
-> warm candle flame inside, fairy-tale checkpoint marker, 48x64 sprite + базовый стиль
-
-### 3.3 Врата главы (`assets/sprites/portal.png`)
-Кадр **96×96**, файл **768×96**. Ряд 0: idle (8, 10 fps) — вращающиеся
-руны по кольцу, пульсирующее сияние внутри.
-
-**Промт (EN):**
-> ancient magical portal gate, ring of violet stone with six rotating glowing
-> golden runes, soft radiant light inside the ring, 96x96 sprite + базовый стиль
+| Ряд | Анимация | FPS | Фраза |
+|---|---|---|---|
+| 0 | fly | 16 | `sprite sheet, 6 frames of a wing flap flying cycle in a single horizontal row, the exact same moth in every frame` |
+| 1 | talk | 12 | `sprite sheet, 6 frames of fluttering and emitting tiny golden sparkles in a single horizontal row, the exact same moth in every frame` |
 
 ---
 
-## 4. Тайлсеты (блоки)
+## 3. Враги
 
-Один файл на главу: полоса **192×32** — шесть тайлов 32×32 слева направо:
+У всех: ряд 0 — движение, ряд 1 — squash. **По 2 генерации на врага.**
 
-| № | Тайл | Описание |
-|---|------|----------|
-| 0 | земля (верх) | поверхность с травой/кристаллами/кладкой |
-| 1 | земля (внутри) | тёмное заполнение под поверхностью |
-| 2 | платформа | тонкая one-way платформа (верхние 12px тайла) |
-| 3 | шипы | 4 треугольных шипа снизу вверх (движок сам переворачивает для потолка) |
-| 4 | декор-1 | гриб / кристалл / обломок колонны |
-| 5 | декор-2 | папоротник / друза мелких кристаллов / светящаяся руна |
+**Общая фраза squash (подставляется к описанию существа):**
 
-Тайлы 0–2 должны **бесшовно стыковаться** по горизонтали.
+```
+sprite sheet, 4 frames of being squashed flat and vanishing in a single horizontal row, the exact same creature getting flatter and fading in each frame
+```
 
-### 4.1 `assets/tiles/ch1.png` — Угасший лес
-> seamless 2D platformer tileset, mossy dark forest ground with muted green
-> grass top edge, rich dark soil, wooden one-way platform, pale bone-like
-> spikes, glowing mushroom decor, fern decor, 32x32 tiles + базовый стиль
+### 3.1 Тенеросток — гл. 1 (`assets/sprites/sprout.png`), кадр 48×48, файл 288×96
+ОПИСАНИЕ: `corrupted plant bulb monster, small onion-shaped dark green creature with a single wilted leaf on top, glowing pale green eyes, forest shadow creature, side view facing right`
+- walk (6 кадров, 10 fps): `sprite sheet, 6 frames of a hopping squishy walk cycle in a single horizontal row, the exact same creature in every frame, squashing and stretching as it hops`
 
-### 4.2 `assets/tiles/ch2.png` — Хрустальные пещеры
-> seamless 2D platformer tileset, dark violet cave stone with faint crystal
-> veins, amethyst top edge glow, crystal platform ledge, sharp crystal
-> spikes, big glowing cyan crystal decor, small geode cluster decor, 32x32 tiles + базовый стиль
+### 3.2 Гранильщик — гл. 2 (`assets/sprites/crawler.png`), кадр 48×48, файл 288×96
+ОПИСАНИЕ: `segmented cave beetle monster, three rounded violet carapace segments with small glowing crystal shards on its back, many tiny legs, pale lavender glowing eyes, side view facing right`
+- walk (6, 12 fps): `sprite sheet, 6 frames of a crawling walk cycle in a single horizontal row, the exact same creature in every frame, legs skittering`
 
-### 4.3 `assets/tiles/ch3.png` — Небесная цитадель
-> seamless 2D platformer tileset, ancient sky-castle masonry, pale blue-grey
-> stone blocks with cloud-worn edges, marble platform ledge, golden spear
-> spikes, broken column decor, glowing rune tablet decor, 32x32 tiles + базовый стиль
+### 3.3 Каменный страж — гл. 3 (`assets/sprites/sentry.png`), кадр 48×48, файл 288×96
+ОПИСАНИЕ: `small ancient stone golem sentinel, weathered grey-blue rock cube body with a glowing golden rune on its chest, mossy cracks, sky citadel guardian, side view facing right`
+- walk (6, 8 fps): `sprite sheet, 6 frames of a slow heavy rocking walk in a single horizontal row, the exact same golem in every frame, tilting side to side`
+- squash: общая фраза + `cracking apart` вместо `getting flatter`
 
----
+### 3.4 Сумрачная мышь — гл. 1–2 (`assets/sprites/bat.png`), кадр 32×32, файл 128×64
+ОПИСАНИЕ: `small shadow bat creature, dark purple round fluffy body, wide dusk-grey webbed wings, tiny amber glowing eyes, flying, side view`
+- fly (4, 14 fps): `sprite sheet, 4 frames of a full wing flap cycle in a single horizontal row, the exact same bat in every frame`
 
-## 5. Фоны (по 3 слоя на главу)
-
-| Файл | Размер | Параллакс | Что на нём |
-|------|--------|-----------|------------|
-| `chN_sky.png` | 960×540 | статичен | небо/градиент, луна, звёзды |
-| `chN_far.png` | 1024×540 | 0.2 | дальние силуэты, **прозрачный фон**, бесшовный по X |
-| `chN_near.png` | 1024×540 | 0.5 | ближние силуэты, **прозрачный фон**, бесшовный по X |
-
-### 5.1 Глава 1 — Угасший лес (`assets/bg/ch1_*.png`)
-- sky: > twilight forest sky, deep blue-teal gradient, pale moon, faint fireflies
-- far: > distant dark tree silhouettes layer, seamless horizontal tile, transparent background
-- near: > large gnarled tree trunks and branches silhouettes, hanging moss, seamless, transparent background
-
-### 5.2 Глава 2 — Хрустальные пещеры (`assets/bg/ch2_*.png`)
-- sky: > dark violet cave depth gradient, faint glowing crystal dust particles
-- far: > distant stalagmite and stalactite silhouettes with faint crystal glow, seamless, transparent
-- near: > large cave rock formations and glowing crystal clusters silhouettes, seamless, transparent
-
-### 5.3 Глава 3 — Небесная цитадель (`assets/bg/ch3_*.png`)
-- sky: > dawn sky above the clouds, soft blue to warm gold gradient, glowing sun
-- far: > distant floating islands and cloud banks silhouettes, seamless, transparent
-- near: > ruined sky citadel towers and large clouds silhouettes, seamless, transparent
-
-(к каждому добавляй базовый стиль-промт)
+### 3.5 Грозовой огонёк — гл. 3 (`assets/sprites/wisp.png`), кадр 32×32, файл 192×64
+ОПИСАНИЕ: `hostile storm wisp spirit, teardrop-shaped pale blue flame with white-hot core and small dark angry eyes, floating`
+- fly (6, 12 fps): `sprite sheet, 6 frames of a flame flicker cycle in a single horizontal row, the exact same wisp in every frame, flame tip waving`
+- squash: `sprite sheet, 4 frames of the flame shrinking and going out in a single horizontal row, the exact same wisp fading in each frame`
 
 ---
 
-## 6. Звук и музыка (на будущее, в коде пока процедурные SFX)
+## 4. Объекты
 
-Музыка (например, Suno / Udio), лупы 60–90 сек, формат ogg/mp3:
-- **Гл. 1:** > melancholic fairy-tale forest ambient, music box and soft strings, mysterious, calm loop, game background music
-- **Гл. 2:** > crystal cave ambient, glass-like bells, deep reverb drones, wonder and echo, loop
-- **Гл. 3:** > airy heroic finale, soft choir and harp above the clouds, hopeful, loop
-- **Меню:** > quiet lullaby theme, single music box melody, warm and sad
+### 4.1 Осколок света (`assets/sprites/shard.png`), кадр 32×32, файл 256×32
+ОПИСАНИЕ: `glowing golden light shard, small floating diamond-shaped star fragment, warm amber glow with bright white core, magical collectible item`
+- spin (8, 12 fps): `sprite sheet, 8 frames of a spin animation in a single horizontal row, the same diamond rotating around its vertical axis, narrowing to a sliver in the middle frames and opening again, glow pulsing`
 
-SFX (прыжок, подбор осколка, урон, чекпоинт, портал) сейчас синтезируются
-кодом — можно заменить позже, скажешь, и я добавлю загрузку файлов.
+### 4.2 Чекпоинт-фонарь (`assets/sprites/lantern.png`), кадр 48×64, файл 288×192
+ОПИСАНИЕ: `old iron lantern post, dark forged metal street lamp with glass cage on a slim pole, fairy-tale checkpoint marker`. **3 генерации:**
+
+| Ряд | Анимация | Кадров | FPS | Фраза |
+|---|---|---|---|---|
+| 0 | off | 1 | — | `single frame, the lantern unlit and dark` |
+| 1 | ignite | 6 | 14 | `sprite sheet, 6 frames of the candle flame igniting and growing in a single horizontal row, the exact same lantern in every frame` |
+| 2 | on | 6 | 8 | `sprite sheet, 6 frames of a warm flame gently flickering in a single horizontal row, the exact same lantern in every frame` |
+
+### 4.3 Врата главы (`assets/sprites/portal.png`), кадр 96×96, файл 768×96
+ОПИСАНИЕ: `ancient magical portal gate, ring of carved violet stone with six glowing golden runes, soft radiant golden light swirling inside the ring, standing on ground`
+- idle (8, 10 fps): `sprite sheet, 8 frames in a single horizontal row, the exact same portal in every frame, the six runes rotated one step further in each frame, inner glow pulsing`
 
 ---
 
-## 7. Как подключать
+## 5. Тайлсеты (без анимации — одна картинка на главу)
 
-1. Сгенерируй PNG по промту.
-2. Приведи к точному размеру и раскладке из таблицы (кадры слева направо, анимации сверху вниз).
-3. Положи файл по указанному пути в репозитории.
-4. Обнови страницу — движок сам заменит плейсхолдер этим файлом.
+Файл **192×32**: шесть тайлов 32×32 в ряд:
+[0] земля-верх, [1] земля-внутри, [2] тонкая платформа, [3] шипы, [4] декор-1, [5] декор-2.
+Тайлы 0–2 бесшовные по горизонтали. К каждому промту добавь СТИЛЬ.
 
-Если ассет выглядит криво (не тот масштаб, смещён центр) — покажи мне файл,
-я подгоню параметры кадра в `js/config.js` под него.
+- `assets/tiles/ch1.png`: `2D platformer tileset strip of six separate 32x32 tiles side by side in one row: mossy forest ground top with muted green grass edge, dark soil fill tile, thin wooden platform ledge, pale bone-like spikes, glowing pink mushroom, curled fern sprout, seamless tiling`
+- `assets/tiles/ch2.png`: `2D platformer tileset strip of six separate 32x32 tiles side by side in one row: dark violet cave stone top with faint amethyst glow edge, deep purple rock fill tile, thin crystal platform ledge, sharp pale crystal spikes, large glowing cyan crystal, small geode cluster, seamless tiling`
+- `assets/tiles/ch3.png`: `2D platformer tileset strip of six separate 32x32 tiles side by side in one row: ancient pale blue-grey castle masonry top edge, weathered stone brick fill tile, thin marble platform ledge, golden spear spikes, broken marble column piece, glowing golden rune tablet, seamless tiling`
+
+---
+
+## 6. Фоны (без анимации — одна картинка на слой, 9 файлов)
+
+`sky` — 960×540 непрозрачный; `far`/`near` — 1024×540, прозрачный фон,
+**бесшовные по горизонтали** (тайлятся при параллаксе).
+
+Глава 1 (`assets/bg/ch1_*.png`):
+- sky: `twilight forest sky background, deep blue-teal vertical gradient, pale full moon, scattered faint fireflies and stars, hand-painted 2D game background`
+- far: `layer of distant dark tree silhouettes, thin trunks and round crowns, seamless horizontal tiling, transparent background, hand-painted 2D game parallax layer`
+- near: `large gnarled tree trunks and twisted branches silhouettes with hanging moss, seamless horizontal tiling, transparent background, hand-painted 2D game parallax layer`
+
+Глава 2 (`assets/bg/ch2_*.png`):
+- sky: `dark violet cave depth background, near-black purple vertical gradient, faint glowing crystal dust particles, hand-painted 2D game background`
+- far: `distant stalagmite and stalactite silhouettes with faint cyan crystal glow, seamless horizontal tiling, transparent background`
+- near: `large dark cave rock formations and glowing amethyst crystal clusters silhouettes, seamless horizontal tiling, transparent background`
+
+Глава 3 (`assets/bg/ch3_*.png`):
+- sky: `dawn sky above the clouds background, soft blue to warm golden vertical gradient, glowing rising sun, hand-painted 2D game background`
+- far: `distant floating islands and soft cloud banks silhouettes, seamless horizontal tiling, transparent background`
+- near: `ruined sky citadel towers and large dramatic clouds silhouettes, seamless horizontal tiling, transparent background`
+
+---
+
+## 7. Звук и музыка (на будущее; сейчас SFX процедурные)
+
+Лупы 60–90 сек (Suno/Udio), ogg/mp3:
+- Гл. 1: `melancholic fairy-tale forest ambient, music box and soft strings, mysterious, calm loop, game background music`
+- Гл. 2: `crystal cave ambient, glass-like bells, deep reverb drones, wonder and echo, loop`
+- Гл. 3: `airy heroic finale, soft choir and harp above the clouds, hopeful, loop`
+- Меню: `quiet lullaby theme, single music box melody, warm and sad`
+
+---
+
+## 8. Как сдавать результаты
+
+Присылай сгенерированные картинки Клоду как есть — он нарежет кадры,
+выровняет их, соберёт спрайт-листы точной раскладки, положит в `assets/` и
+при необходимости подгонит `js/config.js` (размер кадра, число кадров, fps).
