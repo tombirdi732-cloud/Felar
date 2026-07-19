@@ -37,19 +37,22 @@ func _draw() -> void:
 					Rect2(idx * t2, 0, t2, t2))
 				if top_open and level.tile(c, r - 1) == " ":
 					var hv := hash2(c, r * 31 + level.ch)
+					# декор утоплен в мох, чтобы скрыть нарисованное основание
 					if hv > 0.93:
 						draw_texture_rect_region(tex,
-							Rect2(pos - Vector2(0, ts), Vector2(ts, ts)), Rect2(4 * t2, 0, t2, t2))
+							Rect2(pos - Vector2(0, ts - 10), Vector2(ts, ts)), Rect2(4 * t2, 0, t2, t2))
 					elif hv < 0.05:
 						draw_texture_rect_region(tex,
-							Rect2(pos - Vector2(0, ts), Vector2(ts, ts)), Rect2(5 * t2, 0, t2, t2))
+							Rect2(pos - Vector2(0, ts - 10), Vector2(ts, ts)), Rect2(5 * t2, 0, t2, t2))
 			elif t == "=":
 				draw_texture_rect_region(tex, Rect2(pos, Vector2(ts, ts)), Rect2(2 * t2, 0, t2, t2))
 			elif t == "^":
-				draw_texture_rect_region(tex, Rect2(pos, Vector2(ts, ts)), Rect2(3 * t2, 0, t2, t2))
+				# шипы утоплены: основание перекроется блоком земли ниже
+				draw_texture_rect_region(tex,
+					Rect2(pos + Vector2(0, 8), Vector2(ts, ts)), Rect2(3 * t2, 0, t2, t2))
 			elif t == "v":
-				# шипы с потолка: переворот по вертикали
-				draw_set_transform(pos + Vector2(ts / 2.0, ts / 2.0), 0.0, Vector2(1, -1))
+				# шипы с потолка: переворот по вертикали, утоплены вверх
+				draw_set_transform(pos + Vector2(ts / 2.0, ts / 2.0 - 8), 0.0, Vector2(1, -1))
 				draw_texture_rect_region(tex,
 					Rect2(-ts / 2.0, -ts / 2.0, ts, ts), Rect2(3 * t2, 0, t2, t2))
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

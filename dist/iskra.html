@@ -1861,19 +1861,20 @@ function drawTiles() {
       if (t === "#") {
         const topOpen = lvl.tile(c, r - 1) !== "#";
         ctx.drawImage(ts, (topOpen ? 0 : 1) * T2, 0, T2, T2, x, y, TILE, TILE);
-        // декор поверх земли
+        // декор поверх земли (утоплен в мох, чтобы скрыть основание)
         if (topOpen && lvl.tile(c, r - 1) === " ") {
           const h = hash2(c, r * 31 + G.chapter);
-          if (h > 0.93) ctx.drawImage(ts, 4 * T2, 0, T2, T2, x, y - TILE, TILE, TILE);
-          else if (h < 0.05) ctx.drawImage(ts, 5 * T2, 0, T2, T2, x, y - TILE, TILE, TILE);
+          if (h > 0.93) ctx.drawImage(ts, 4 * T2, 0, T2, T2, x, y - TILE + 10, TILE, TILE);
+          else if (h < 0.05) ctx.drawImage(ts, 5 * T2, 0, T2, T2, x, y - TILE + 10, TILE, TILE);
         }
       } else if (t === "=") {
         ctx.drawImage(ts, 2 * T2, 0, T2, T2, x, y, TILE, TILE);
       } else if (t === "^") {
-        ctx.drawImage(ts, 3 * T2, 0, T2, T2, x, y, TILE, TILE);
+        // шипы утоплены: их основание перекроется блоком земли ниже
+        ctx.drawImage(ts, 3 * T2, 0, T2, T2, x, y + 8, TILE, TILE);
       } else if (t === "v") {
         ctx.save();
-        ctx.translate(x + TILE / 2, y + TILE / 2);
+        ctx.translate(x + TILE / 2, y + TILE / 2 - 8);
         ctx.scale(1, -1);
         ctx.drawImage(ts, 3 * T2, 0, T2, T2, -TILE / 2, -TILE / 2, TILE, TILE);
         ctx.restore();
