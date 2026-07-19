@@ -19,7 +19,7 @@ function walk(dir) {
     const rel = `${dir}/${e.name}`;
     if (e.isDirectory()) walk(rel);
     else if (/\.(png|jpg|webp)$/i.test(e.name)) {
-      const mime = e.name.endsWith(".png") ? "image/png" : "image/jpeg";
+      const mime = e.name.endsWith(".png") ? "image/png" : e.name.endsWith(".webp") ? "image/webp" : "image/jpeg";
       embedded[rel] = `data:${mime};base64,` +
         fs.readFileSync(path.join(ROOT, rel)).toString("base64");
     }

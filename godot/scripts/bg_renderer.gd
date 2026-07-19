@@ -10,9 +10,9 @@ var near_tex: Texture2D
 
 
 func set_chapter(ch: int) -> void:
-	sky = load("res://assets/bg/ch%d_sky.png" % ch)
-	far_tex = load("res://assets/bg/ch%d_far.png" % ch)
-	near_tex = load("res://assets/bg/ch%d_near.png" % ch)
+	sky = load("res://assets/bg/ch%d_sky.webp" % ch)
+	far_tex = load("res://assets/bg/ch%d_far.webp" % ch)
+	near_tex = load("res://assets/bg/ch%d_near.webp" % ch)
 
 
 func _draw() -> void:
