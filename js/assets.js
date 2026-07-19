@@ -432,7 +432,18 @@ const Assets = (() => {
   }
 
   // ---------- фоны ----------
+  // Все фоновые текстуры хранятся в 2x: генерируем в логическом
+  // размере и удваиваем (rendering-код делит ширину слоёв на 2)
   function buildPlaceholderBackdrop(ch, layer) {
+    const c1 = buildPlaceholderBackdrop1x(ch, layer);
+    const c = mkCanvas(c1.width * 2, c1.height * 2);
+    const cx2 = c.getContext("2d");
+    cx2.imageSmoothingEnabled = true;
+    cx2.drawImage(c1, 0, 0, c.width, c.height);
+    return c;
+  }
+
+  function buildPlaceholderBackdrop1x(ch, layer) {
     const pal = CHAPTER_META[ch].pal;
     const w = layer === "sky" ? VIEW_W : 1024;
     const c = mkCanvas(w, VIEW_H);

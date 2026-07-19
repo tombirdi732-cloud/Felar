@@ -232,12 +232,15 @@ function drawBackdrop() {
   ctx.drawImage(bd.sky, 0, -cy * 0.12 - skyPad, VIEW_W, VIEW_H + skyPad * 2);
   for (const [layer, k, kv] of [["far", 0.2, 0.25], ["near", 0.5, 0.45]]) {
     const img = bd[layer];
+    // текстуры слоёв хранятся в 2x-разрешении и рисуются вдвое
+    // меньше логически — на hi-dpi экранах это даёт резкость
+    const lw = img.width / 2;
     const pad = Math.ceil(70 * kv) + 4;
     const y = -cy * kv - pad;
     const h = VIEW_H + pad * 2;
-    const off = (-G.camera.x * k) % img.width;
-    for (let x = off - img.width; x < VIEW_W; x += img.width)
-      ctx.drawImage(img, Math.round(x), y, img.width, h);
+    const off = (-G.camera.x * k) % lw;
+    for (let x = off - lw; x < VIEW_W; x += lw)
+      ctx.drawImage(img, Math.round(x), y, lw, h);
   }
 }
 

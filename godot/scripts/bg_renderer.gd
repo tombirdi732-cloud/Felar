@@ -30,7 +30,8 @@ func _draw() -> void:
 		var pad := ceil(70.0 * kv) + 4.0
 		var y := -cy * kv - pad
 		var lh := h + pad * 2
-		var tw := float(tex.get_width())
+		# текстуры слоёв в 2x-разрешении, рисуются вдвое меньше
+		var tw := float(tex.get_width()) / 2.0
 		var off := fmod(-main.cam.x * k, tw)
 		var x := off - tw
 		while x < w:
