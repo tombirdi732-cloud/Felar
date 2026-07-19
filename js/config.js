@@ -122,9 +122,9 @@ const TILESET_COUNT = 6;
 // Фоны: на главу — sky (960x540, статичный),
 // far (1024x540, параллакс 0.2), near (1024x540, параллакс 0.5)
 const BACKDROPS = {
-  1: { sky: "assets/bg/ch1_sky.png", far: "assets/bg/ch1_far.png", near: "assets/bg/ch1_near.png" },
-  2: { sky: "assets/bg/ch2_sky.png", far: "assets/bg/ch2_far.png", near: "assets/bg/ch2_near.png" },
-  3: { sky: "assets/bg/ch3_sky.png", far: "assets/bg/ch3_far.png", near: "assets/bg/ch3_near.png" },
+  1: { sky: "assets/bg/ch1_sky.webp", far: "assets/bg/ch1_far.webp", near: "assets/bg/ch1_near.webp" },
+  2: { sky: "assets/bg/ch2_sky.webp", far: "assets/bg/ch2_far.webp", near: "assets/bg/ch2_near.webp" },
+  3: { sky: "assets/bg/ch3_sky.webp", far: "assets/bg/ch3_far.webp", near: "assets/bg/ch3_near.webp" },
 };
 
 // Палитры глав (используются плейсхолдерами и UI)
