@@ -54,7 +54,7 @@ class Animator {
     if (flip) ctx.scale(-1, 1);
     ctx.drawImage(
       s.img,
-      this.frame * s.fw, a.row * s.fh, s.fw, s.fh,
+      ((a.start || 0) + this.frame) * s.fw, a.row * s.fh, s.fw, s.fh,
       -s.fw / 2, -s.fh, s.fw, s.fh
     );
     ctx.restore();

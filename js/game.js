@@ -141,6 +141,10 @@ function updatePlay(dt) {
         p.y = mp.y - p.h;
         p.vy = 0;
         p.onGround = true;
+        // платформа = земля: сброс прыжков, рывка и время койота
+        p.jumps = 0;
+        p.airDashUsed = false;
+        p.coyote = PHYS.coyote;
         p.x += mp.dx;
         p.y += mp.dy;
       }

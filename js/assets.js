@@ -341,14 +341,14 @@ const Assets = (() => {
 
   function buildPlaceholderSheet(name, spec) {
     const animNames = Object.keys(spec.anims);
-    const maxFrames = Math.max(...animNames.map((a) => spec.anims[a].frames));
+    const maxFrames = Math.max(...animNames.map((a) => (spec.anims[a].start || 0) + spec.anims[a].frames));
     const c = mkCanvas(maxFrames * spec.fw, animNames.length * spec.fh);
     const ctx = c.getContext("2d");
     animNames.forEach((an, row) => {
       const a = spec.anims[an];
       for (let f = 0; f < a.frames; f++) {
         ctx.save();
-        ctx.translate(f * spec.fw, row * spec.fh);
+        ctx.translate(((a.start || 0) + f) * spec.fw, row * spec.fh);
         ctx.beginPath();
         ctx.rect(0, 0, spec.fw, spec.fh);
         ctx.clip();

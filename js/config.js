@@ -39,8 +39,10 @@ const SPRITES = {
     anims: {
       idle:       { frames: 6, fps: 8,  loop: true  },
       run:        { frames: 8, fps: 14, loop: true  },
-      jump:       { frames: 4, fps: 12, loop: false },
-      fall:       { frames: 4, fps: 12, loop: false },
+      // в листе по 4 кадра, но позы похожи на бег — в воздухе
+      // держим один выразительный кадр (start — колонка в листе)
+      jump:       { frames: 1, start: 0, fps: 12, loop: false },
+      fall:       { frames: 1, start: 2, fps: 12, loop: false },
       doublejump: { frames: 6, fps: 18, loop: false },
       dash:       { frames: 4, fps: 22, loop: false },
       hurt:       { frames: 4, fps: 12, loop: false },

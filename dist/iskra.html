@@ -67,8 +67,10 @@ const SPRITES = {
     anims: {
       idle:       { frames: 6, fps: 8,  loop: true  },
       run:        { frames: 8, fps: 14, loop: true  },
-      jump:       { frames: 4, fps: 12, loop: false },
-      fall:       { frames: 4, fps: 12, loop: false },
+      // в листе по 4 кадра, но позы похожи на бег — в воздухе
+      // держим один выразительный кадр (start — колонка в листе)
+      jump:       { frames: 1, start: 0, fps: 12, loop: false },
+      fall:       { frames: 1, start: 2, fps: 12, loop: false },
       doublejump: { frames: 6, fps: 18, loop: false },
       dash:       { frames: 4, fps: 22, loop: false },
       hurt:       { frames: 4, fps: 12, loop: false },
@@ -279,7 +281,7 @@ class Animator {
     if (flip) ctx.scale(-1, 1);
     ctx.drawImage(
       s.img,
-      this.frame * s.fw, a.row * s.fh, s.fw, s.fh,
+      ((a.start || 0) + this.frame) * s.fw, a.row * s.fh, s.fw, s.fh,
       -s.fw / 2, -s.fh, s.fw, s.fh
     );
     ctx.restore();
@@ -751,14 +753,14 @@ const Assets = (() => {
 
   function buildPlaceholderSheet(name, spec) {
     const animNames = Object.keys(spec.anims);
-    const maxFrames = Math.max(...animNames.map((a) => spec.anims[a].frames));
+    const maxFrames = Math.max(...animNames.map((a) => (spec.anims[a].start || 0) + spec.anims[a].frames));
     const c = mkCanvas(maxFrames * spec.fw, animNames.length * spec.fh);
     const ctx = c.getContext("2d");
     animNames.forEach((an, row) => {
       const a = spec.anims[an];
       for (let f = 0; f < a.frames; f++) {
         ctx.save();
-        ctx.translate(f * spec.fw, row * spec.fh);
+        ctx.translate(((a.start || 0) + f) * spec.fw, row * spec.fh);
         ctx.beginPath();
         ctx.rect(0, 0, spec.fw, spec.fh);
         ctx.clip();
@@ -1713,6 +1715,10 @@ function updatePlay(dt) {
         p.y = mp.y - p.h;
         p.vy = 0;
         p.onGround = true;
+        // платформа = земля: сброс прыжков, рывка и время койота
+        p.jumps = 0;
+        p.airDashUsed = false;
+        p.coyote = PHYS.coyote;
         p.x += mp.dx;
         p.y += mp.dy;
       }
