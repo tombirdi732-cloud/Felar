@@ -11,6 +11,11 @@ const Assets = (() => {
   const backdrops = {}; // chapter -> {sky, far, near}
 
   function loadImage(src) {
+    // сборка в один файл кладёт ассеты как data-URL в window.EMBEDDED_ASSETS
+    if (window.EMBEDDED_ASSETS) {
+      if (!window.EMBEDDED_ASSETS[src]) return Promise.resolve(null);
+      src = window.EMBEDDED_ASSETS[src];
+    }
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => resolve(img);
