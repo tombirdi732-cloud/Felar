@@ -1,6 +1,6 @@
 "use strict";
 // ============================================================
-// FELAR — глобальная конфигурация
+// ИСКРА — глобальная конфигурация
 // ============================================================
 
 const TILE = 32;          // размер тайла в пикселях
@@ -34,8 +34,8 @@ const PHYS = {
 // Если файла нет — генерируется анимированный плейсхолдер.
 // ------------------------------------------------------------
 const SPRITES = {
-  felar: {
-    file: "assets/sprites/felar.png", fw: 64, fh: 64,
+  lum: {
+    file: "assets/sprites/lum.png", fw: 64, fh: 64,
     anims: {
       idle:       { frames: 6, fps: 8,  loop: true  },
       run:        { frames: 8, fps: 14, loop: true  },
@@ -150,4 +150,4 @@ const CHAPTER_META = {
   },
 };
 
-const SAVE_KEY = "felar_save_v1";
+const SAVE_KEY = "iskra_save_v1";

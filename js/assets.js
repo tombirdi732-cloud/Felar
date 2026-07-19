@@ -54,7 +54,7 @@ const Assets = (() => {
     const S = Math.sin(t * Math.PI * 2);
     const S2 = Math.sin(t * Math.PI * 4);
 
-    if (name === "felar") {
+    if (name === "lum") {
       const bodyC = "#cfeee6", hoodC = "#3f8f7f", scarfC = "#ffb45c", eyeC = "#173b36";
       let bob = 0, tilt = 0, sx = 1, sy = 1, alpha = 1, rot = 0, legSwing = 0, scarfW = 0;
       if (anim === "idle") { bob = S * 1.6; scarfW = S * 2; }

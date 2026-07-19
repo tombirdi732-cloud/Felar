@@ -1,6 +1,6 @@
 "use strict";
 // ============================================================
-// FELAR — основной цикл игры, состояния, рендер, UI
+// ИСКРА — основной цикл игры, состояния, рендер, UI
 // ============================================================
 
 const canvas = document.getElementById("game");
@@ -416,7 +416,7 @@ function renderMenu() {
   ctx.shadowBlur = 30 * pulse;
   ctx.fillStyle = "#ffeec2";
   ctx.font = "bold 96px Georgia, serif";
-  ctx.fillText("FELAR", VIEW_W / 2, VIEW_H * 0.42);
+  ctx.fillText("ИСКРА", VIEW_W / 2, VIEW_H * 0.42);
   ctx.restore();
   ctx.fillStyle = "rgba(255,255,255,0.65)";
   ctx.font = "20px 'Segoe UI', sans-serif";
@@ -529,7 +529,7 @@ function renderEnd() {
   if (G.chapter === 3) {
     ctx.fillStyle = "rgba(255,255,255,0.75)";
     ctx.font = "18px 'Segoe UI', sans-serif";
-    ctx.fillText("Фелар вернул осколки Сердцу Небес, и над лесом снова встала заря.", VIEW_W / 2, VIEW_H * 0.42);
+    ctx.fillText("Люм вернул осколки Сердцу Небес, и над лесом снова встала заря.", VIEW_W / 2, VIEW_H * 0.42);
     ctx.fillText("Спасибо за игру! (демо трёх глав)", VIEW_W / 2, VIEW_H * 0.42 + 28);
   }
   ctx.fillStyle = "#ffe9a3";

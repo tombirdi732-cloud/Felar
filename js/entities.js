@@ -21,7 +21,7 @@ class Player {
     this.inv = 0;             // неуязвимость после урона
     this.dead = false;
     this.deadT = 0;
-    this.anim = new Animator("felar");
+    this.anim = new Animator("lum");
     this.anim.set("idle");
     this.carrier = null;      // движущаяся платформа под ногами
     this.wasOnGround = false;
