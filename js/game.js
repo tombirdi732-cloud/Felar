@@ -246,6 +246,9 @@ function drawBackdrop() {
 
 function drawTiles() {
   const lvl = G.level, ts = Assets.tileset(G.chapter);
+  // тайлсет может храниться в повышенном разрешении (ячейка = высота файла)
+  const S = ts.height / TILE;
+  const T2 = TILE * S;
   const c0 = Math.max(0, Math.floor(G.camera.ox() / TILE));
   const c1 = Math.min(lvl.cols - 1, Math.ceil((G.camera.ox() + VIEW_W) / TILE));
   for (let r = 0; r < lvl.rows; r++) {
@@ -254,22 +257,22 @@ function drawTiles() {
       const x = c * TILE, y = r * TILE;
       if (t === "#") {
         const topOpen = lvl.tile(c, r - 1) !== "#";
-        ctx.drawImage(ts, (topOpen ? 0 : 1) * TILE, 0, TILE, TILE, x, y, TILE, TILE);
+        ctx.drawImage(ts, (topOpen ? 0 : 1) * T2, 0, T2, T2, x, y, TILE, TILE);
         // декор поверх земли
         if (topOpen && lvl.tile(c, r - 1) === " ") {
           const h = hash2(c, r * 31 + G.chapter);
-          if (h > 0.82) ctx.drawImage(ts, 4 * TILE, 0, TILE, TILE, x, y - TILE, TILE, TILE);
-          else if (h < 0.1) ctx.drawImage(ts, 5 * TILE, 0, TILE, TILE, x, y - TILE, TILE, TILE);
+          if (h > 0.93) ctx.drawImage(ts, 4 * T2, 0, T2, T2, x, y - TILE, TILE, TILE);
+          else if (h < 0.05) ctx.drawImage(ts, 5 * T2, 0, T2, T2, x, y - TILE, TILE, TILE);
         }
       } else if (t === "=") {
-        ctx.drawImage(ts, 2 * TILE, 0, TILE, TILE, x, y, TILE, TILE);
+        ctx.drawImage(ts, 2 * T2, 0, T2, T2, x, y, TILE, TILE);
       } else if (t === "^") {
-        ctx.drawImage(ts, 3 * TILE, 0, TILE, TILE, x, y, TILE, TILE);
+        ctx.drawImage(ts, 3 * T2, 0, T2, T2, x, y, TILE, TILE);
       } else if (t === "v") {
         ctx.save();
         ctx.translate(x + TILE / 2, y + TILE / 2);
         ctx.scale(1, -1);
-        ctx.drawImage(ts, 3 * TILE, 0, TILE, TILE, -TILE / 2, -TILE / 2, TILE, TILE);
+        ctx.drawImage(ts, 3 * T2, 0, T2, T2, -TILE / 2, -TILE / 2, TILE, TILE);
         ctx.restore();
       }
     }

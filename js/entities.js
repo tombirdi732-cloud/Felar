@@ -335,8 +335,9 @@ class MovingPlatform {
   }
   draw(ctx, ch) {
     const ts = Assets.tileset(ch);
+    const T2 = ts.height; // ячейка тайлсета (32 или 64)
     for (let i = 0; i < 3; i++)
-      ctx.drawImage(ts, 2 * TILE, 0, TILE, TILE, this.x + i * TILE, this.y - 2, TILE, TILE);
+      ctx.drawImage(ts, 2 * T2, 0, T2, T2, this.x + i * TILE, this.y - 2, TILE, TILE);
   }
 }
 

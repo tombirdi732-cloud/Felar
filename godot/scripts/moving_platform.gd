@@ -41,5 +41,6 @@ func step(dt: float) -> void:
 
 func _draw() -> void:
 	var ts := GameData.TILE
+	var t2 := float(_tex.get_height())
 	for i in range(3):
-		draw_texture_rect_region(_tex, Rect2(i * ts, 0, ts, ts), Rect2(2 * ts, 0, ts, ts))
+		draw_texture_rect_region(_tex, Rect2(i * ts, 0, ts, ts), Rect2(2 * t2, 0, t2, t2))
