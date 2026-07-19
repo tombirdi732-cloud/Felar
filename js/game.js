@@ -5,7 +5,7 @@
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = false;
+let RENDER_SCALE = 1; // канвас рендерится в нативном разрешении экрана
 
 // ---------- сохранение ----------
 const Save = {
@@ -178,9 +178,16 @@ function updatePlay(dt) {
     G.enemies.forEach(hitEnemy);
     G.flyers.forEach(hitEnemy);
 
-    // осколки
+    // осколки: магнит + подбор
     for (const s of G.shards) {
-      if (!s.taken && aabb(p.rect, s.rect)) { s.take(); G.shardsGot++; }
+      if (s.taken) continue;
+      const dx = p.cx - s.x, dy = p.y + p.h / 2 - s.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0 && d < 80) {
+        s.x += (dx / d) * 380 * dt;
+        s.y += (dy / d) * 380 * dt;
+      }
+      if (aabb(p.rect, s.rect)) { s.take(); G.shardsGot++; }
     }
     // чекпоинты
     for (const c of G.checkpoints) {
@@ -233,12 +240,19 @@ function updatePlay(dt) {
 // ---------- рендер ----------
 function drawBackdrop() {
   const bd = Assets.backdrop(G.chapter);
-  ctx.drawImage(bd.sky, 0, 0, VIEW_W, VIEW_H);
-  for (const [layer, k] of [["far", 0.2], ["near", 0.5]]) {
+  const cy = G.camera.y;
+  // вертикальный параллакс: слои сдвигаются меньше камеры,
+  // рисуем с запасом по высоте, чтобы не было пустых полос
+  const skyPad = 18;
+  ctx.drawImage(bd.sky, 0, -cy * 0.12 - skyPad, VIEW_W, VIEW_H + skyPad * 2);
+  for (const [layer, k, kv] of [["far", 0.2, 0.25], ["near", 0.5, 0.45]]) {
     const img = bd[layer];
+    const pad = Math.ceil(70 * kv) + 4;
+    const y = -cy * kv - pad;
+    const h = VIEW_H + pad * 2;
     const off = (-G.camera.x * k) % img.width;
     for (let x = off - img.width; x < VIEW_W; x += img.width)
-      ctx.drawImage(img, Math.round(x), 0);
+      ctx.drawImage(img, Math.round(x), y, img.width, h);
   }
 }
 
@@ -565,6 +579,8 @@ function frame(now) {
     }
   } else if (G.fade > 0) G.fade = Math.max(0, G.fade - dt * 2);
 
+  ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
+  ctx.imageSmoothingEnabled = true;
   ctx.clearRect(0, 0, VIEW_W, VIEW_H);
   if (G.state === "loading") {
     ctx.fillStyle = "#0c0f18";
@@ -592,8 +608,12 @@ function frame(now) {
 // ---------- масштабирование канваса ----------
 function fitCanvas() {
   const scale = Math.min(window.innerWidth / VIEW_W, window.innerHeight / VIEW_H);
+  const dpr = window.devicePixelRatio || 1;
   canvas.style.width = `${VIEW_W * scale}px`;
   canvas.style.height = `${VIEW_H * scale}px`;
+  canvas.width = Math.max(1, Math.round(VIEW_W * scale * dpr));
+  canvas.height = Math.max(1, Math.round(VIEW_H * scale * dpr));
+  RENDER_SCALE = canvas.width / VIEW_W;
 }
 window.addEventListener("resize", fitCanvas);
 fitCanvas();

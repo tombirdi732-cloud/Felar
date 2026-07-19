@@ -29,7 +29,7 @@ const CH1_SCREENS = [
     8: "           oo", 15: F_ROW, 16: F_ROW, 17: F_ROW },
   { 11: "        F", 12: "   oo    oo    oo",
     15: "####   ####   ####   ###", 16: "####   ####   ####   ###", 17: "####   ####   ####   ###" },
-  { 13: "    oo    oo    oo", 14: "   ^^^   ^^^   ^^^", 15: F_ROW, 16: F_ROW, 17: F_ROW },
+  { 12: "    oo    oo    oo", 14: "   ^^^   ^^^   ^^^", 15: F_ROW, 16: F_ROW, 17: F_ROW },
   { 13: "      M", 11: "         o  o  o",
     15: "#####              #####", 16: "#####              #####", 17: "#####              #####" },
   { 13: "   E        E      3", 15: F_ROW, 16: F_ROW, 17: F_ROW },
@@ -91,7 +91,7 @@ const CH3_SCREENS = [
   { 11: "   o           o", 13: "       ^^",
     14: "  ###  ###    ###   ####", 15: "  ###  ###    ###   ####" },
   { 13: "  K       3", 14: F_ROW, 15: F_ROW },
-  { 12: "           o", 13: "     E    ^^^     E", 14: F_ROW, 15: F_ROW },
+  { 11: "           o", 13: "     E    ^^^     E", 14: F_ROW, 15: F_ROW },
   { 11: "    oo      oo      oo",
     14: "###     ###     ###     ", 15: "###     ###     ###     " },
   { 11: "     4", 12: "              X", 14: F_ROW, 15: F_ROW },
@@ -222,10 +222,10 @@ class Level {
       for (let c = c0; c <= c1; c++) {
         const t = this.tile(c, r);
         if (t === "^") {
-          const hb = { x: c * TILE + 5, y: r * TILE + 14, w: TILE - 10, h: TILE - 14 };
+          const hb = { x: c * TILE + 7, y: r * TILE + 18, w: TILE - 14, h: TILE - 18 };
           if (aabb(rect, hb)) return true;
         } else if (t === "v") {
-          const hb = { x: c * TILE + 5, y: r * TILE, w: TILE - 10, h: TILE - 14 };
+          const hb = { x: c * TILE + 7, y: r * TILE, w: TILE - 14, h: TILE - 18 };
           if (aabb(rect, hb)) return true;
         }
       }

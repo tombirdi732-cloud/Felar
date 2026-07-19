@@ -10,7 +10,5 @@ html, body {
 }
 
 #game {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
   box-shadow: 0 0 60px rgba(255, 233, 163, 0.08);
 }
