@@ -100,7 +100,7 @@ func _draw_heart(x: float, y: float, filled: bool) -> void:
 	var pts := PackedVector2Array()
 	for i in range(16):
 		var a := float(i) / 16.0 * TAU
-		var hx := 16.0 * pow(sin(a), 3)
+		var hx: float = 16.0 * pow(sin(a), 3.0)
 		var hy := -(13.0 * cos(a) - 5.0 * cos(2 * a) - 2.0 * cos(3 * a) - cos(4 * a))
 		pts.append(Vector2(x + hx * 0.55, y + hy * 0.55))
 	draw_colored_polygon(pts, col)

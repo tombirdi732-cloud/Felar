@@ -27,9 +27,9 @@ func _draw() -> void:
 		var tex: Texture2D = layer[0]
 		var k: float = layer[1]
 		var kv: float = layer[2]
-		var pad := ceil(70.0 * kv) + 4.0
-		var y := -cy * kv - pad
-		var lh := h + pad * 2
+		var pad: float = ceilf(70.0 * kv) + 4.0
+		var y: float = -cy * kv - pad
+		var lh: float = h + pad * 2.0
 		# текстуры слоёв в 2x-разрешении, рисуются вдвое меньше
 		var tw := float(tex.get_width()) / 2.0
 		var off := fmod(-main.cam.x * k, tw)
