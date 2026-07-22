@@ -6,6 +6,7 @@ export const PERM = {
   MANAGE_CHANNELS: 8,  // create/rename/delete channels, edit channel settings
   KICK_MEMBERS: 16,    // remove members
   MANAGE_MESSAGES: 32, // delete other people's messages
+  BAN_MEMBERS: 64,     // ban members (permanent, can't rejoin by invite)
 };
 
 export const ALL_PERMS = Object.values(PERM).reduce((a, b) => a | b, 0);

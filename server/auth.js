@@ -34,9 +34,16 @@ export function authRequired(req, res, next) {
   const payload = token && verifyToken(token);
   if (!payload) return res.status(401).json({ error: 'Не авторизован' });
 
-  const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(payload.id);
+  const user = db.prepare('SELECT id, username, avatar, is_banned, is_admin FROM users WHERE id = ?').get(payload.id);
   if (!user) return res.status(401).json({ error: 'Пользователь не найден' });
+  if (user.is_banned) return res.status(403).json({ error: 'Аккаунт заблокирован' });
 
-  req.user = user;
+  req.user = { id: user.id, username: user.username, avatar: user.avatar, is_admin: !!user.is_admin };
+  next();
+}
+
+// Middleware: requires the current user to be a site administrator.
+export function adminRequired(req, res, next) {
+  if (!req.user || !req.user.is_admin) return res.status(403).json({ error: 'Только для администратора' });
   next();
 }

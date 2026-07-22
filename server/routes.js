@@ -9,6 +9,7 @@ import {
   verifyPassword,
   signToken,
   authRequired,
+  adminRequired,
 } from './auth.js';
 import { broadcastToServer, isOnline, sendToUser } from './hub.js';
 import {
@@ -44,11 +45,13 @@ router.post('/auth/register', (req, res) => {
   const exists = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
   if (exists) return res.status(409).json({ error: 'Имя уже занято' });
 
+  // The very first registered user becomes the site administrator.
+  const isFirst = !db.prepare('SELECT 1 FROM users LIMIT 1').get();
   const info = db
-    .prepare('INSERT INTO users (username, password, created_at) VALUES (?, ?, ?)')
-    .run(username, hashPassword(password), now());
+    .prepare('INSERT INTO users (username, password, created_at, is_admin) VALUES (?, ?, ?, ?)')
+    .run(username, hashPassword(password), now(), isFirst ? 1 : 0);
 
-  const user = { id: info.lastInsertRowid, username, avatar: null };
+  const user = { id: info.lastInsertRowid, username, avatar: null, is_admin: isFirst };
   res.json({ token: signToken(user), user });
 });
 
@@ -59,8 +62,9 @@ router.post('/auth/login', (req, res) => {
   const row = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
   if (!row || !verifyPassword(password, row.password))
     return res.status(401).json({ error: 'Неверное имя или пароль' });
+  if (row.is_banned) return res.status(403).json({ error: 'Аккаунт заблокирован' });
 
-  const user = { id: row.id, username: row.username, avatar: row.avatar };
+  const user = { id: row.id, username: row.username, avatar: row.avatar, is_admin: !!row.is_admin };
   res.json({ token: signToken(user), user });
 });
 
@@ -183,6 +187,9 @@ router.post('/servers/join', authRequired, (req, res) => {
   const code = String(req.body?.invite_code || '').trim().toLowerCase();
   const server = db.prepare('SELECT * FROM servers WHERE invite_code = ?').get(code);
   if (!server) return res.status(404).json({ error: 'Приглашение не найдено' });
+
+  if (db.prepare('SELECT 1 FROM bans WHERE server_id = ? AND user_id = ?').get(server.id, req.user.id))
+    return res.status(403).json({ error: 'Ты забанен на этом сервере' });
 
   const already = db
     .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND server_id = ?')
@@ -349,6 +356,97 @@ router.delete('/servers/:id/members/:userId', authRequired, (req, res) => {
   broadcastToServer(serverId, { type: 'member_left', server_id: serverId, user_id: targetId });
   sendToUser(targetId, { type: 'server_removed', server_id: serverId });
   res.json({ ok: true });
+});
+
+/* ---------------------- Server bans ---------------------- */
+
+// List a server's bans (BAN_MEMBERS).
+router.get('/servers/:id/bans', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  if (!hasPerm(req.user.id, serverId, PERM.BAN_MEMBERS)) return res.status(403).json({ error: 'Недостаточно прав' });
+  const rows = db
+    .prepare(
+      `SELECT b.user_id, b.reason, b.created_at, u.username, u.avatar
+       FROM bans b JOIN users u ON u.id = b.user_id
+       WHERE b.server_id = ? ORDER BY b.created_at DESC`
+    )
+    .all(serverId);
+  res.json({ bans: rows });
+});
+
+// Ban a member (BAN_MEMBERS + hierarchy). Removes them and blocks rejoin.
+router.post('/servers/:id/bans', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const targetId = Number(req.body?.user_id);
+  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  if (!hasPerm(req.user.id, serverId, PERM.BAN_MEMBERS)) return res.status(403).json({ error: 'Недостаточно прав' });
+  if (targetId === req.user.id) return res.status(400).json({ error: 'Нельзя забанить себя' });
+  if (server.owner_id === targetId) return res.status(403).json({ error: 'Нельзя забанить владельца' });
+  if (highestPosition(req.user.id, serverId) <= highestPosition(targetId, serverId))
+    return res.status(403).json({ error: 'Недостаточно прав для этого участника' });
+
+  const reason = String(req.body?.reason || '').slice(0, 200);
+  db.prepare('INSERT OR REPLACE INTO bans (server_id, user_id, banned_by, reason, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(serverId, targetId, req.user.id, reason, now());
+  db.prepare('DELETE FROM memberships WHERE user_id = ? AND server_id = ?').run(targetId, serverId);
+  db.prepare('DELETE FROM member_roles WHERE user_id = ? AND server_id = ?').run(targetId, serverId);
+  broadcastToServer(serverId, { type: 'member_left', server_id: serverId, user_id: targetId });
+  sendToUser(targetId, { type: 'server_removed', server_id: serverId });
+  res.json({ ok: true });
+});
+
+// Unban (BAN_MEMBERS).
+router.delete('/servers/:id/bans/:userId', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const targetId = Number(req.params.userId);
+  if (!hasPerm(req.user.id, serverId, PERM.BAN_MEMBERS)) return res.status(403).json({ error: 'Недостаточно прав' });
+  db.prepare('DELETE FROM bans WHERE server_id = ? AND user_id = ?').run(serverId, targetId);
+  res.json({ ok: true });
+});
+
+/* ---------------------- Site administration ---------------------- */
+
+// List all users (admin only).
+router.get('/admin/users', authRequired, adminRequired, (req, res) => {
+  const users = db.prepare('SELECT id, username, avatar, is_banned, is_admin, created_at FROM users ORDER BY id').all();
+  res.json({ users: users.map((u) => ({ ...u, is_banned: !!u.is_banned, is_admin: !!u.is_admin })) });
+});
+
+// Ban / unban an account platform-wide (admin only).
+router.post('/admin/users/:id/ban', authRequired, adminRequired, (req, res) => {
+  const targetId = Number(req.params.id);
+  const banned = req.body?.banned ? 1 : 0;
+  const target = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(targetId);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (targetId === req.user.id) return res.status(400).json({ error: 'Нельзя заблокировать себя' });
+  if (target.is_admin) return res.status(403).json({ error: 'Нельзя заблокировать администратора' });
+
+  db.prepare('UPDATE users SET is_banned = ? WHERE id = ?').run(banned, targetId);
+  if (banned) sendToUser(targetId, { type: 'account_banned' });
+  res.json({ ok: true, banned: !!banned });
+});
+
+// Force-delete any server (admin only).
+router.delete('/admin/servers/:id', authRequired, adminRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const server = db.prepare('SELECT id FROM servers WHERE id = ?').get(serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  broadcastToServer(serverId, { type: 'server_deleted', server_id: serverId });
+  db.prepare('DELETE FROM servers WHERE id = ?').run(serverId);
+  res.json({ ok: true });
+});
+
+// List all servers (admin only).
+router.get('/admin/servers', authRequired, adminRequired, (req, res) => {
+  const servers = db
+    .prepare(
+      `SELECT s.id, s.name, s.owner_id, u.username AS owner_name,
+              (SELECT COUNT(*) FROM memberships m WHERE m.server_id = s.id) AS members
+       FROM servers s JOIN users u ON u.id = s.owner_id ORDER BY s.id`
+    )
+    .all();
+  res.json({ servers });
 });
 
 /* ---------------------- Channel settings ---------------------- */

@@ -209,6 +209,21 @@ async function startApp() {
   $('me-name-dm').textContent = state.user.username;
   refreshMyAvatars();
 
+  // Site admin gets an extra settings section.
+  if (state.user.is_admin && !document.querySelector('.s-item[data-section="admin"]')) {
+    const navBtn = el('button', 's-item');
+    navBtn.dataset.section = 'admin';
+    navBtn.appendChild(icon('lock', 'ic ic-sm'));
+    navBtn.appendChild(el('span', null, 'Администрирование'));
+    navBtn.addEventListener('click', () => {
+      settingsSection = 'admin';
+      document.querySelectorAll('.s-item[data-section]').forEach((x) => x.classList.toggle('active', x === navBtn));
+      renderSettings();
+    });
+    const logout = $('settings-logout');
+    logout.parentNode.insertBefore(navBtn, logout);
+  }
+
   await loadServers();
   connectWebSocket();
   loadRtcConfig();
@@ -396,12 +411,13 @@ const REACTION_EMOJIS = ['👍', '❤️', '🔥', '😂', '🎉', '✅'];
 const msgById = new Map(); // id -> message data (for in-place updates)
 
 // Permission flags (mirror of server/perms.js).
-const PERM = { ADMINISTRATOR: 1, MANAGE_SERVER: 2, MANAGE_ROLES: 4, MANAGE_CHANNELS: 8, KICK_MEMBERS: 16, MANAGE_MESSAGES: 32 };
+const PERM = { ADMINISTRATOR: 1, MANAGE_SERVER: 2, MANAGE_ROLES: 4, MANAGE_CHANNELS: 8, KICK_MEMBERS: 16, MANAGE_MESSAGES: 32, BAN_MEMBERS: 64 };
 const PERM_LIST = [
   ['MANAGE_SERVER', 'Управление сервером'],
   ['MANAGE_ROLES', 'Управление ролями'],
   ['MANAGE_CHANNELS', 'Управление каналами'],
   ['KICK_MEMBERS', 'Исключение участников'],
+  ['BAN_MEMBERS', 'Бан участников'],
   ['MANAGE_MESSAGES', 'Управление сообщениями'],
   ['ADMINISTRATOR', 'Администратор (все права)'],
 ];
@@ -746,6 +762,52 @@ function renderSettings() {
     l.appendChild(el('div', 's-desc', 'Пароли хранятся в зашифрованном виде (bcrypt). Двухфакторную аутентификацию добавим позже.'));
     info.appendChild(l);
     block.appendChild(info);
+  } else if (settingsSection === 'admin' && state.user.is_admin) {
+    c.appendChild(el('h2', null, 'Администрирование'));
+
+    block.appendChild(el('div', 'field-label', 'Пользователи'));
+    const usersWrap = el('div');
+    usersWrap.appendChild(el('p', 's-desc', 'Загрузка…'));
+    block.appendChild(usersWrap);
+    api('/admin/users').then(({ users }) => {
+      usersWrap.innerHTML = '';
+      for (const u of users) {
+        const row = el('div', 'ss-row');
+        row.appendChild(avatarEl(u.username, { size: 'sm', avatar: u.avatar }));
+        const label = u.username + (u.is_admin ? ' · админ' : (u.is_banned ? ' · заблокирован' : ''));
+        row.appendChild(el('span', 'ss-member-name', label));
+        if (!u.is_admin) {
+          const btn = el('button', 'btn-mini' + (u.is_banned ? '' : ' danger'), u.is_banned ? 'Разблокировать' : 'Заблокировать');
+          btn.addEventListener('click', async () => {
+            try { await api(`/admin/users/${u.id}/ban`, { method: 'POST', body: { banned: !u.is_banned } }); renderSettings(); }
+            catch (e) { alert(e.message); }
+          });
+          row.appendChild(btn);
+        }
+        usersWrap.appendChild(row);
+      }
+    }).catch(() => { usersWrap.innerHTML = ''; });
+
+    block.appendChild(el('div', 'field-label', 'Серверы'));
+    const srvWrap = el('div');
+    srvWrap.appendChild(el('p', 's-desc', 'Загрузка…'));
+    block.appendChild(srvWrap);
+    api('/admin/servers').then(({ servers }) => {
+      srvWrap.innerHTML = '';
+      if (!servers.length) { srvWrap.appendChild(el('p', 's-desc', 'Серверов нет.')); return; }
+      for (const s of servers) {
+        const row = el('div', 'ss-row');
+        row.appendChild(el('span', 'ss-member-name', `${s.name} · ${s.owner_name} · ${s.members} уч.`));
+        const del = el('button', 'btn-mini danger', 'Удалить');
+        del.addEventListener('click', async () => {
+          if (!confirm(`Удалить сервер «${s.name}»? Необратимо.`)) return;
+          try { await api(`/admin/servers/${s.id}`, { method: 'DELETE' }); renderSettings(); }
+          catch (e) { alert(e.message); }
+        });
+        row.appendChild(del);
+        srvWrap.appendChild(row);
+      }
+    }).catch(() => { srvWrap.innerHTML = ''; });
   }
   c.appendChild(block);
 }
@@ -793,6 +855,7 @@ function handleWsEvent(msg) {
     case 'call_decline': handleCallDecline(); break;
     case 'call_busy': handleCallBusy(); break;
     case 'call_end': handleCallEnd(); break;
+    case 'account_banned': alert('Ваш аккаунт заблокирован администратором.'); logout(); break;
     case 'typing': showTyping(msg); break;
   }
 }
@@ -934,6 +997,9 @@ function memberPosition(m) {
 function canKick(m) {
   return hasPerm(PERM.KICK_MEMBERS) && !m.owner && m.id !== state.user.id && state.myPosition > memberPosition(m);
 }
+function canBan(m) {
+  return hasPerm(PERM.BAN_MEMBERS) && !m.owner && m.id !== state.user.id && state.myPosition > memberPosition(m);
+}
 
 function openServerSettings() {
   const server = state.servers.find((s) => s.id === state.currentServerId);
@@ -1024,8 +1090,40 @@ function openServerSettings() {
         });
         row.appendChild(kick);
       }
+      if (canBan(m)) {
+        const ban = el('button', 'btn-mini danger', 'Бан');
+        ban.addEventListener('click', async () => {
+          if (!confirm(`Забанить ${m.username}? Он не сможет вернуться по приглашению.`)) return;
+          try { await api(`/servers/${server.id}/bans`, { method: 'POST', body: { user_id: m.id } }); } catch (e) { $('ss-error').textContent = e.message; }
+        });
+        row.appendChild(ban);
+      }
       body.appendChild(row);
     }
+  }
+
+  // Bans (BAN_MEMBERS).
+  if (hasPerm(PERM.BAN_MEMBERS)) {
+    body.appendChild(el('div', 'field-label', 'Баны'));
+    const bansWrap = el('div');
+    bansWrap.appendChild(el('p', 's-desc', 'Загрузка…'));
+    body.appendChild(bansWrap);
+    api(`/servers/${server.id}/bans`).then(({ bans }) => {
+      bansWrap.innerHTML = '';
+      if (!bans.length) { bansWrap.appendChild(el('p', 's-desc', 'Никто не забанен.')); return; }
+      for (const b of bans) {
+        const row = el('div', 'ss-row');
+        row.appendChild(avatarEl(b.username, { size: 'sm', avatar: b.avatar }));
+        row.appendChild(el('span', 'ss-member-name', b.username));
+        const unban = el('button', 'btn-mini', 'Разбан');
+        unban.addEventListener('click', async () => {
+          try { await api(`/servers/${server.id}/bans/${b.user_id}`, { method: 'DELETE' }); openServerSettings(); }
+          catch (e) { $('ss-error').textContent = e.message; }
+        });
+        row.appendChild(unban);
+        bansWrap.appendChild(row);
+      }
+    }).catch(() => { bansWrap.innerHTML = ''; });
   }
 
   // Danger zone.

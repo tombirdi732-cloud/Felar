@@ -120,6 +120,16 @@ db.exec(`
     PRIMARY KEY (channel_id, role_id)
   );
 
+  -- Users banned from a server (can't rejoin by invite).
+  CREATE TABLE IF NOT EXISTS bans (
+    server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    banned_by  INTEGER,
+    reason     TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (server_id, user_id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_roles_server      ON roles(server_id);
   CREATE INDEX IF NOT EXISTS idx_member_roles_user ON member_roles(user_id, server_id);
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
@@ -144,9 +154,20 @@ ensureColumn('dm_messages', 'attachment_url', 'TEXT');
 ensureColumn('dm_messages', 'attachment_name', 'TEXT');
 ensureColumn('dm_messages', 'attachment_type', 'TEXT');
 ensureColumn('users', 'avatar', 'TEXT');
+ensureColumn('users', 'is_banned', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'is_admin', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('memberships', 'role', "TEXT NOT NULL DEFAULT 'member'");
 ensureColumn('channels', 'topic', 'TEXT');
 ensureColumn('channels', 'is_private', 'INTEGER NOT NULL DEFAULT 0');
+
+// Make sure there is a site administrator: the earliest-registered user.
+(() => {
+  const hasAdmin = db.prepare('SELECT 1 FROM users WHERE is_admin = 1').get();
+  if (!hasAdmin) {
+    const first = db.prepare('SELECT id FROM users ORDER BY id LIMIT 1').get();
+    if (first) db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(first.id);
+  }
+})();
 
 // --- seed default roles + migrate legacy admins into a role ---
 (() => {
