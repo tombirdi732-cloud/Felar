@@ -11,44 +11,18 @@ import {
   authRequired,
 } from './auth.js';
 import { broadcastToServer, isOnline, sendToUser } from './hub.js';
+import {
+  memberPermissions,
+  hasPerm,
+  highestPosition,
+  canViewChannel,
+  channelViewers,
+  channelRoleIds,
+  broadcastToChannel,
+} from './access.js';
 
 const router = Router();
 const now = () => Date.now();
-
-/* ---------------------- Permissions ---------------------- */
-
-// Effective permission bitfield for a user on a server.
-function memberPermissions(userId, serverId) {
-  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
-  if (!server) return 0;
-  if (server.owner_id === userId) return ALL_PERMS;
-  const rows = db
-    .prepare(
-      `SELECT r.permissions FROM roles r
-       LEFT JOIN member_roles mr ON mr.role_id = r.id AND mr.user_id = ?
-       WHERE r.server_id = ? AND (r.is_default = 1 OR mr.user_id IS NOT NULL)`
-    )
-    .all(userId, serverId);
-  let perms = 0;
-  for (const r of rows) perms |= r.permissions;
-  return perms & PERM.ADMINISTRATOR ? ALL_PERMS : perms;
-}
-function hasPerm(userId, serverId, flag) {
-  return (memberPermissions(userId, serverId) & flag) === flag;
-}
-// Highest role position a user holds (owner ranks above everything).
-function highestPosition(userId, serverId) {
-  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
-  if (server && server.owner_id === userId) return Infinity;
-  const row = db
-    .prepare(
-      `SELECT MAX(r.position) AS p FROM roles r
-       JOIN member_roles mr ON mr.role_id = r.id
-       WHERE mr.user_id = ? AND r.server_id = ?`
-    )
-    .get(userId, serverId);
-  return row && row.p != null ? row.p : 0;
-}
 
 function makeInviteCode() {
   return crypto.randomBytes(4).toString('hex'); // 8 hex chars
@@ -133,13 +107,19 @@ router.post('/upload', authRequired, rawUpload, (req, res) => {
 
 /* ---------------------------- Servers --------------------------- */
 
-// Serialize a server with its channels for the client.
-function serializeServer(serverId) {
+// Serialize a server with the channels the given user is allowed to see.
+function serializeServer(serverId, userId) {
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
   if (!server) return null;
-  const channels = db
-    .prepare('SELECT id, name, position, topic FROM channels WHERE server_id = ? ORDER BY position, id')
+  const rows = db
+    .prepare('SELECT id, name, position, topic, is_private, server_id FROM channels WHERE server_id = ? ORDER BY position, id')
     .all(serverId);
+  const channels = rows
+    .filter((c) => canViewChannel(userId, c))
+    .map((c) => ({
+      id: c.id, name: c.name, position: c.position, topic: c.topic,
+      is_private: !!c.is_private, role_ids: c.is_private ? channelRoleIds(c.id) : [],
+    }));
   return {
     id: server.id,
     name: server.name,
@@ -159,7 +139,7 @@ router.get('/servers', authRequired, (req, res) => {
        ORDER BY m.joined_at`
     )
     .all(req.user.id);
-  res.json({ servers: rows.map((r) => serializeServer(r.id)) });
+  res.json({ servers: rows.map((r) => serializeServer(r.id, req.user.id)) });
 });
 
 // Create a server (+ a default #general channel, owner becomes member).
@@ -182,7 +162,7 @@ router.post('/servers', authRequired, (req, res) => {
     return serverId;
   });
 
-  res.json({ server: serializeServer(tx()) });
+  res.json({ server: serializeServer(tx(), req.user.id) });
 });
 
 // Join a server by invite code.
@@ -203,7 +183,7 @@ router.post('/servers/join', authRequired, (req, res) => {
       user: req.user,
     }, { exceptUserId: req.user.id });
   }
-  res.json({ server: serializeServer(server.id) });
+  res.json({ server: serializeServer(server.id, req.user.id) });
 });
 
 // Helper: assert current user is a member of the server owning `serverId`.
@@ -212,6 +192,13 @@ function assertMember(userId, serverId) {
     .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND server_id = ?')
     .get(userId, serverId);
 }
+
+// One server serialized for the current user (used to refresh channel lists).
+router.get('/servers/:id', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  if (!assertMember(req.user.id, serverId)) return res.status(403).json({ error: 'Нет доступа' });
+  res.json({ server: serializeServer(serverId, req.user.id) });
+});
 
 // Members of a server with online status.
 router.get('/servers/:id/members', authRequired, (req, res) => {
@@ -280,8 +267,8 @@ router.post('/servers/:id/channels', authRequired, (req, res) => {
     .prepare('INSERT INTO channels (server_id, name, position, created_at) VALUES (?, ?, ?, ?)')
     .run(serverId, name, maxPos + 1, now());
 
-  const channel = { id: info.lastInsertRowid, name, position: maxPos + 1 };
-  broadcastToServer(serverId, { type: 'channel_created', server_id: serverId, channel });
+  const channel = { id: info.lastInsertRowid, name, position: maxPos + 1, topic: null, is_private: false, role_ids: [] };
+  broadcastToServer(serverId, { type: 'server_channels', server_id: serverId });
   res.json({ channel });
 });
 
@@ -372,7 +359,32 @@ router.patch('/channels/:id', authRequired, (req, res) => {
     topic = String(req.body.topic).slice(0, 200);
     db.prepare('UPDATE channels SET topic = ? WHERE id = ?').run(topic, channelId);
   }
-  broadcastToServer(channel.server_id, { type: 'channel_updated', server_id: channel.server_id, channel: { id: channelId, name, topic } });
+
+  // Privacy / allowed roles.
+  let visibilityChanged = false;
+  if (req.body?.is_private !== undefined) {
+    const isPrivate = req.body.is_private ? 1 : 0;
+    db.prepare('UPDATE channels SET is_private = ? WHERE id = ?').run(isPrivate, channelId);
+    visibilityChanged = true;
+  }
+  if (req.body?.role_ids !== undefined) {
+    const ids = Array.isArray(req.body.role_ids) ? req.body.role_ids.map(Number) : [];
+    const valid = new Set(db.prepare('SELECT id FROM roles WHERE server_id = ? AND is_default = 0').all(channel.server_id).map((r) => r.id));
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM channel_roles WHERE channel_id = ?').run(channelId);
+      const ins = db.prepare('INSERT OR IGNORE INTO channel_roles (channel_id, role_id) VALUES (?, ?)');
+      for (const rid of ids) if (valid.has(rid)) ins.run(channelId, rid);
+    });
+    tx();
+    visibilityChanged = true;
+  }
+
+  if (visibilityChanged) {
+    // Membership of the channel may have changed for many users — have everyone refresh.
+    broadcastToServer(channel.server_id, { type: 'server_channels', server_id: channel.server_id });
+  } else {
+    broadcastToServer(channel.server_id, { type: 'channel_updated', server_id: channel.server_id, channel: { id: channelId, name, topic } });
+  }
   res.json({ ok: true, name, topic });
 });
 
@@ -385,7 +397,7 @@ router.delete('/channels/:id', authRequired, (req, res) => {
     return res.status(403).json({ error: 'Недостаточно прав' });
 
   db.prepare('DELETE FROM channels WHERE id = ?').run(channelId);
-  broadcastToServer(channel.server_id, { type: 'channel_deleted', server_id: channel.server_id, channel_id: channelId });
+  broadcastToServer(channel.server_id, { type: 'server_channels', server_id: channel.server_id });
   res.json({ ok: true });
 });
 
@@ -521,7 +533,7 @@ router.get('/channels/:id/messages', authRequired, (req, res) => {
   const channelId = Number(req.params.id);
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
   if (!channel) return res.status(404).json({ error: 'Канал не найден' });
-  if (!assertMember(req.user.id, channel.server_id))
+  if (!canViewChannel(req.user.id, channel))
     return res.status(403).json({ error: 'Нет доступа' });
 
   const before = Number(req.query.before) || Number.MAX_SAFE_INTEGER;
@@ -547,7 +559,7 @@ router.get('/channels/:id/messages', authRequired, (req, res) => {
 function loadMessageForUser(messageId, userId) {
   const m = db
     .prepare(
-      `SELECT m.*, c.server_id, s.owner_id
+      `SELECT m.*, c.server_id, c.is_private, s.owner_id
        FROM messages m
        JOIN channels c ON c.id = m.channel_id
        JOIN servers s ON s.id = c.server_id
@@ -555,8 +567,13 @@ function loadMessageForUser(messageId, userId) {
     )
     .get(messageId);
   if (!m) return { error: 404 };
-  if (!assertMember(userId, m.server_id)) return { error: 403 };
+  if (!canViewChannel(userId, { id: m.channel_id, server_id: m.server_id, is_private: m.is_private })) return { error: 403 };
   return { message: m };
+}
+
+// Build a channel descriptor for broadcastToChannel from a loaded message.
+function channelOf(message) {
+  return { id: message.channel_id, server_id: message.server_id, is_private: message.is_private };
 }
 
 // Edit a message (author only).
@@ -571,7 +588,7 @@ router.patch('/messages/:id', authRequired, (req, res) => {
 
   const ts = now();
   db.prepare('UPDATE messages SET content = ?, edited_at = ? WHERE id = ?').run(content, ts, message.id);
-  broadcastToServer(message.server_id, {
+  broadcastToChannel(channelOf(message), {
     type: 'message_updated',
     message: { id: message.id, channel_id: message.channel_id, content, edited_at: ts },
   });
@@ -586,7 +603,7 @@ router.delete('/messages/:id', authRequired, (req, res) => {
     return res.status(403).json({ error: 'Нет прав на удаление' });
 
   db.prepare('DELETE FROM messages WHERE id = ?').run(message.id);
-  broadcastToServer(message.server_id, {
+  broadcastToChannel(channelOf(message), {
     type: 'message_deleted',
     message_id: message.id,
     channel_id: message.channel_id,
@@ -614,7 +631,7 @@ router.post('/messages/:id/react', authRequired, (req, res) => {
   }
 
   const reactions = reactionsFor([message.id])[message.id] || [];
-  broadcastToServer(message.server_id, {
+  broadcastToChannel(channelOf(message), {
     type: 'reaction_updated',
     message_id: message.id,
     channel_id: message.channel_id,

@@ -7,6 +7,7 @@ import {
   broadcastToServer,
   sendToUser,
 } from './hub.js';
+import { canViewChannel, broadcastToChannel } from './access.js';
 
 const now = () => Date.now();
 
@@ -56,11 +57,7 @@ function handleMessage(ws, raw) {
 
     const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
     if (!channel) return;
-
-    const member = db
-      .prepare('SELECT 1 FROM memberships WHERE user_id = ? AND server_id = ?')
-      .get(ws.userId, channel.server_id);
-    if (!member) return;
+    if (!canViewChannel(ws.userId, channel)) return;
 
     const ts = now();
     const info = db
@@ -85,21 +82,17 @@ function handleMessage(ws, raw) {
         attachment_type: att?.type || null,
       },
     };
-    // Deliver to all members of the server (including sender, for confirmation).
-    broadcastToServer(channel.server_id, payload);
+    // Deliver to everyone who can view the channel (including sender, for confirmation).
+    broadcastToChannel(channel, payload);
     return;
   }
 
   if (msg.type === 'typing') {
     const channelId = Number(msg.channel_id);
-    const channel = db.prepare('SELECT server_id FROM channels WHERE id = ?').get(channelId);
-    if (!channel) return;
+    const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
+    if (!channel || !canViewChannel(ws.userId, channel)) return;
     const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(ws.userId);
-    broadcastToServer(
-      channel.server_id,
-      { type: 'typing', channel_id: channelId, user },
-      { exceptUserId: ws.userId }
-    );
+    broadcastToChannel(channel, { type: 'typing', channel_id: channelId, user }, { exceptUserId: ws.userId });
     return;
   }
 

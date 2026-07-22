@@ -317,6 +317,7 @@ function renderTree() {
     const item = el('button', 'channel' + (ch.id === state.currentChannelId ? ' active' : ''));
     item.appendChild(icon('hash', 'ic ic-sm'));
     item.appendChild(el('span', 'ch-name', ch.name));
+    if (ch.is_private) { const lk = icon('lock', 'ic ic-sm'); lk.classList.add('ch-lock'); item.appendChild(lk); }
     item.addEventListener('click', () => { showView('chat'); selectChannel(ch.id); });
     chans.appendChild(item);
   }
@@ -779,6 +780,7 @@ function handleWsEvent(msg) {
     case 'channel_created': handleChannelCreated(msg); break;
     case 'channel_updated': applyChannelUpdate(msg.server_id, msg.channel); break;
     case 'channel_deleted': removeChannelLocally(msg.server_id, msg.channel_id); break;
+    case 'server_channels': if (msg.server_id === state.currentServerId) reloadServerChannels(msg.server_id); break;
     case 'server_updated': applyServerUpdate(msg.server_id, msg.name); break;
     case 'server_deleted': removeServerLocally(msg.server_id); break;
     case 'server_removed': removeServerLocally(msg.server_id); break;
@@ -808,6 +810,24 @@ function handleReactionUpdated(msg) {
   const row = rowFor(msg.message_id);
   if (row) fillMessageBody(row, m);
 }
+// Refetch the current server's channels as visible to this user (private channels).
+async function reloadServerChannels(serverId) {
+  try {
+    const { server } = await api(`/servers/${serverId}`);
+    const s = state.servers.find((x) => x.id === serverId);
+    if (!s || !server) return;
+    s.channels = server.channels;
+    if (serverId === state.currentServerId) {
+      renderTree();
+      if (state.currentChannelId && !s.channels.find((c) => c.id === state.currentChannelId)) {
+        if (s.channels.length) selectChannel(s.channels[0].id);
+        else { state.currentChannelId = null; resetChat(); }
+      }
+      if (!$('server-settings-overlay').classList.contains('hidden')) openServerSettings();
+    }
+  } catch { /* ignore */ }
+}
+
 function handleChannelCreated(msg) {
   const server = state.servers.find((s) => s.id === msg.server_id);
   if (!server) return;
@@ -1035,10 +1055,41 @@ function openChannelSettings(ch) {
     body.appendChild(el('div', 'field-label', 'Тема канала'));
     const topic = el('textarea', 'edit-input'); topic.value = ch.topic || ''; topic.placeholder = 'О чём этот канал…'; topic.maxLength = 200;
     body.appendChild(topic);
+
+    // Privacy
+    const privLine = el('label', 'perm-line'); privLine.style.marginTop = '10px';
+    const priv = el('input'); priv.type = 'checkbox'; priv.checked = !!ch.is_private;
+    privLine.appendChild(priv); privLine.appendChild(el('span', null, 'Приватный канал (доступ по ролям)'));
+    body.appendChild(privLine);
+
+    const rolesWrap = el('div');
+    const boxes = {};
+    const buildRoles = () => {
+      rolesWrap.innerHTML = '';
+      if (!priv.checked) return;
+      rolesWrap.appendChild(el('div', 'field-label', 'Кому доступен'));
+      const roles = state.roles.filter((r) => !r.is_default);
+      if (!roles.length) { rolesWrap.appendChild(el('p', 's-desc', 'Создайте роли, чтобы выдать доступ.')); return; }
+      for (const r of roles) {
+        const line = el('label', 'perm-line');
+        const cb = el('input'); cb.type = 'checkbox'; cb.checked = (ch.role_ids || []).includes(r.id);
+        boxes[r.id] = cb;
+        const dot = el('span', 'role-dot'); dot.style.background = r.color || '#94a3b8';
+        line.appendChild(cb); line.appendChild(dot); line.appendChild(el('span', null, r.name));
+        rolesWrap.appendChild(line);
+      }
+    };
+    priv.addEventListener('change', buildRoles);
+    buildRoles();
+    body.appendChild(rolesWrap);
+
     const save = el('button', 'btn-primary', 'Сохранить');
     save.addEventListener('click', async () => {
-      try { await api(`/channels/${ch.id}`, { method: 'PATCH', body: { name: name.value.trim(), topic: topic.value } }); close(); }
-      catch (e) { err.textContent = e.message; }
+      const role_ids = priv.checked ? Object.keys(boxes).filter((id) => boxes[id].checked).map(Number) : [];
+      try {
+        await api(`/channels/${ch.id}`, { method: 'PATCH', body: { name: name.value.trim(), topic: topic.value, is_private: priv.checked, role_ids } });
+        close();
+      } catch (e) { err.textContent = e.message; }
     });
     body.appendChild(save);
     const del = el('button', 'btn-danger', 'Удалить канал');

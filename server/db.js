@@ -113,6 +113,13 @@ db.exec(`
     PRIMARY KEY (user_id, role_id)
   );
 
+  -- Roles allowed to view a private channel.
+  CREATE TABLE IF NOT EXISTS channel_roles (
+    channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    role_id    INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (channel_id, role_id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_roles_server      ON roles(server_id);
   CREATE INDEX IF NOT EXISTS idx_member_roles_user ON member_roles(user_id, server_id);
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
@@ -139,6 +146,7 @@ ensureColumn('dm_messages', 'attachment_type', 'TEXT');
 ensureColumn('users', 'avatar', 'TEXT');
 ensureColumn('memberships', 'role', "TEXT NOT NULL DEFAULT 'member'");
 ensureColumn('channels', 'topic', 'TEXT');
+ensureColumn('channels', 'is_private', 'INTEGER NOT NULL DEFAULT 0');
 
 // --- seed default roles + migrate legacy admins into a role ---
 (() => {
