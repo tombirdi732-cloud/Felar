@@ -397,4 +397,73 @@ router.post('/messages/:id/react', authRequired, (req, res) => {
   res.json({ reactions });
 });
 
+/* ----------------------- Direct messages ----------------------- */
+
+// Serialize a DM thread from the current user's point of view.
+export function serializeThread(thread, meId) {
+  const otherId = thread.user_lo === meId ? thread.user_hi : thread.user_lo;
+  const other = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(otherId);
+  const last = db
+    .prepare('SELECT content, created_at FROM dm_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1')
+    .get(thread.id);
+  return {
+    id: thread.id,
+    other: other ? { ...other, online: isOnline(other.id) } : null,
+    last_at: thread.last_at,
+    preview: last ? last.content : '',
+  };
+}
+
+// Both participant user ids of a thread the user belongs to (or null).
+function threadParticipants(threadId, userId) {
+  const t = db.prepare('SELECT * FROM dm_threads WHERE id = ?').get(threadId);
+  if (!t || (t.user_lo !== userId && t.user_hi !== userId)) return null;
+  return { thread: t, other: t.user_lo === userId ? t.user_hi : t.user_lo };
+}
+
+// List the current user's DM threads (most recent first).
+router.get('/dms', authRequired, (req, res) => {
+  const rows = db
+    .prepare('SELECT * FROM dm_threads WHERE user_lo = ? OR user_hi = ? ORDER BY last_at DESC')
+    .all(req.user.id, req.user.id);
+  res.json({ threads: rows.map((t) => serializeThread(t, req.user.id)).filter((t) => t.other) });
+});
+
+// Get or create a DM thread with another user.
+router.post('/dms', authRequired, (req, res) => {
+  const otherId = Number(req.body?.user_id);
+  if (!otherId || otherId === req.user.id) return res.status(400).json({ error: 'Некорректный пользователь' });
+  const other = db.prepare('SELECT id FROM users WHERE id = ?').get(otherId);
+  if (!other) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const lo = Math.min(req.user.id, otherId);
+  const hi = Math.max(req.user.id, otherId);
+  let thread = db.prepare('SELECT * FROM dm_threads WHERE user_lo = ? AND user_hi = ?').get(lo, hi);
+  if (!thread) {
+    const info = db
+      .prepare('INSERT INTO dm_threads (user_lo, user_hi, created_at, last_at) VALUES (?, ?, ?, ?)')
+      .run(lo, hi, now(), now());
+    thread = db.prepare('SELECT * FROM dm_threads WHERE id = ?').get(info.lastInsertRowid);
+  }
+  res.json({ thread: serializeThread(thread, req.user.id) });
+});
+
+// History for a DM thread (participant only).
+router.get('/dms/:id/messages', authRequired, (req, res) => {
+  const parts = threadParticipants(Number(req.params.id), req.user.id);
+  if (!parts) return res.status(403).json({ error: 'Нет доступа' });
+
+  const before = Number(req.query.before) || Number.MAX_SAFE_INTEGER;
+  const limit = Math.min(Number(req.query.limit) || 50, 100);
+  const rows = db
+    .prepare(
+      `SELECT m.id, m.thread_id, m.content, m.created_at, m.user_id, u.username, u.avatar
+       FROM dm_messages m JOIN users u ON u.id = m.user_id
+       WHERE m.thread_id = ? AND m.id < ?
+       ORDER BY m.id DESC LIMIT ?`
+    )
+    .all(parts.thread.id, before, limit);
+  res.json({ messages: rows.reverse() });
+});
+
 export default router;

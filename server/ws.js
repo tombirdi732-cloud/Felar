@@ -5,6 +5,7 @@ import {
   addConnection,
   removeConnection,
   broadcastToServer,
+  sendToUser,
 } from './hub.js';
 
 const now = () => Date.now();
@@ -82,6 +83,48 @@ function handleMessage(ws, raw) {
       { type: 'typing', channel_id: channelId, user },
       { exceptUserId: ws.userId }
     );
+    return;
+  }
+
+  if (msg.type === 'dm_message') {
+    const threadId = Number(msg.thread_id);
+    const content = String(msg.content || '').trim();
+    if (!threadId || !content || content.length > 2000) return;
+
+    const thread = db.prepare('SELECT * FROM dm_threads WHERE id = ?').get(threadId);
+    if (!thread || (thread.user_lo !== ws.userId && thread.user_hi !== ws.userId)) return;
+
+    const ts = now();
+    const info = db
+      .prepare('INSERT INTO dm_messages (thread_id, user_id, content, created_at) VALUES (?, ?, ?, ?)')
+      .run(threadId, ws.userId, content, ts);
+    db.prepare('UPDATE dm_threads SET last_at = ? WHERE id = ?').run(ts, threadId);
+
+    const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(ws.userId);
+    const payload = {
+      type: 'dm_message',
+      message: {
+        id: info.lastInsertRowid,
+        thread_id: threadId,
+        content,
+        created_at: ts,
+        user_id: user.id,
+        username: user.username,
+        avatar: user.avatar,
+      },
+    };
+    sendToUser(thread.user_lo, payload);
+    sendToUser(thread.user_hi, payload);
+    return;
+  }
+
+  if (msg.type === 'dm_typing') {
+    const threadId = Number(msg.thread_id);
+    const thread = db.prepare('SELECT * FROM dm_threads WHERE id = ?').get(threadId);
+    if (!thread || (thread.user_lo !== ws.userId && thread.user_hi !== ws.userId)) return;
+    const otherId = thread.user_lo === ws.userId ? thread.user_hi : thread.user_lo;
+    const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(ws.userId);
+    sendToUser(otherId, { type: 'dm_typing', thread_id: threadId, user });
   }
 }
 

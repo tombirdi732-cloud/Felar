@@ -13,6 +13,9 @@ const state = {
   typingTimers: {},
   view: 'chat',
   channelFilter: '',
+  dmThreads: [],
+  currentDmId: null,
+  dmPeer: null,
 };
 
 /* ----------------------- helpers ----------------------- */
@@ -157,6 +160,10 @@ async function startApp() {
   $('me-avatar').replaceWith(meAv);
   $('nav-profile').innerHTML = '';
   $('nav-profile').appendChild(avatarEl(state.user.username, { size: 'sm', status: 'online' }));
+  $('me-name-dm').textContent = state.user.username;
+  const meAvDm = avatarEl(state.user.username, { size: 'sm', status: 'online' });
+  meAvDm.id = 'me-avatar-dm';
+  $('me-avatar-dm').replaceWith(meAvDm);
 
   await loadServers();
   connectWebSocket();
@@ -481,6 +488,10 @@ function renderMembers() {
       info.appendChild(el('div', 'm-name', m.username));
       info.appendChild(el('div', 'm-role', roleOf(m)));
       row.appendChild(info);
+      if (m.id !== state.user.id) {
+        row.title = 'Написать личное сообщение';
+        row.addEventListener('click', () => startDmWith(m.id));
+      }
       box.appendChild(row);
     }
   };
@@ -501,13 +512,17 @@ $('toggle-members').addEventListener('click', () => {
 function showView(v) {
   state.view = v;
   $('chat-view').classList.toggle('hidden', v !== 'chat');
+  $('dm-view').classList.toggle('hidden', v !== 'dms');
   $('profile-view').classList.toggle('hidden', v !== 'profile');
   $('settings-view').classList.toggle('hidden', v !== 'settings');
   $('sidebar').classList.toggle('hidden', v !== 'chat');
+  $('dm-sidebar').classList.toggle('hidden', v !== 'dms');
   $('nav-settings').classList.toggle('active', v === 'settings');
+  $('rail-logo').classList.toggle('active', v === 'dms');
   renderRail();
   if (v === 'profile') renderProfile();
   if (v === 'settings') renderSettings();
+  if (v === 'dms') { $('rail-logo').classList.remove('has-unread'); loadDms(); }
 }
 $('nav-settings').addEventListener('click', () => showView('settings'));
 $('nav-profile').addEventListener('click', () => showView('profile'));
@@ -630,6 +645,8 @@ function handleWsEvent(msg) {
     case 'server_updated': applyServerUpdate(msg.server_id, msg.name); break;
     case 'server_deleted': removeServerLocally(msg.server_id); break;
     case 'server_removed': removeServerLocally(msg.server_id); break;
+    case 'dm_message': handleDmMessage(msg); break;
+    case 'dm_typing': handleDmTyping(msg); break;
     case 'typing': showTyping(msg); break;
   }
 }
@@ -857,6 +874,135 @@ function handleMemberLeft(msg) {
   loadMembers(msg.server_id).then(() => {
     if (!$('server-settings-overlay').classList.contains('hidden')) openServerSettings();
   });
+}
+
+/* ======================= Direct messages ======================= */
+$('logout-btn-dm').addEventListener('click', logout);
+$('rail-logo').addEventListener('click', () => showView('dms'));
+
+async function loadDms() {
+  try {
+    const { threads } = await api('/dms');
+    state.dmThreads = threads;
+    renderDmList();
+  } catch { /* ignore */ }
+}
+
+function renderDmList() {
+  const box = $('dm-list');
+  box.innerHTML = '';
+  if (!state.dmThreads.length) {
+    box.appendChild(el('div', 'tree-empty', 'Пока нет диалогов. Откройте участника сервера и напишите ему.'));
+    return;
+  }
+  for (const th of state.dmThreads) {
+    const row = el('button', 'dm-item' + (th.id === state.currentDmId ? ' active' : ''));
+    row.appendChild(avatarEl(th.other.username, { size: 'sm', status: th.other.online ? 'online' : 'offline' }));
+    const info = el('div', 'dm-item-info');
+    info.appendChild(el('div', 'dm-item-name', th.other.username));
+    info.appendChild(el('div', 'dm-item-preview', th.preview || 'нет сообщений'));
+    row.appendChild(info);
+    row.addEventListener('click', () => openDm(th));
+    box.appendChild(row);
+  }
+}
+
+async function startDmWith(userId) {
+  try {
+    const { thread } = await api('/dms', { method: 'POST', body: { user_id: userId } });
+    showView('dms');
+    const existing = state.dmThreads.find((t) => t.id === thread.id);
+    if (!existing) state.dmThreads.unshift(thread);
+    renderDmList();
+    openDm(thread);
+  } catch (e) { alert(e.message); }
+}
+
+let lastDmMsg = null;
+async function openDm(thread) {
+  state.currentDmId = thread.id;
+  state.dmPeer = thread.other;
+  renderDmList();
+
+  $('dm-peer-name').textContent = thread.other.username;
+  $('dm-peer-status').textContent = thread.other.online ? 'В сети' : 'Не в сети';
+  const av = avatarEl(thread.other.username, { size: 'sm', status: thread.other.online ? 'online' : 'offline' });
+  av.id = 'dm-peer-avatar';
+  $('dm-peer-avatar').replaceWith(av);
+  $('dm-input').disabled = false;
+  $('dm-input').placeholder = `Написать ${thread.other.username}`;
+
+  const box = $('dm-messages');
+  box.innerHTML = '';
+  lastDmMsg = null;
+  const { messages } = await api(`/dms/${thread.id}/messages`);
+  if (!messages.length) {
+    const hint = el('div', 'empty-hint');
+    hint.appendChild(el('h2', null, thread.other.username));
+    hint.appendChild(el('p', null, 'Это начало вашего диалога.'));
+    box.appendChild(hint);
+    return;
+  }
+  for (const m of messages) appendDmMessage(m, false);
+  dmScrollBottom();
+}
+
+function appendDmMessage(m, animate = true) {
+  if (m.thread_id !== state.currentDmId) return;
+  const box = $('dm-messages');
+  const hint = box.querySelector('.empty-hint');
+  if (hint) hint.remove();
+
+  const grouped = lastDmMsg && lastDmMsg.user_id === m.user_id && m.created_at - lastDmMsg.created_at < 5 * 60 * 1000;
+  const row = el('div', 'msg' + (grouped ? ' grouped' : ''));
+  row.appendChild(avatarEl(m.username, { size: 'md' }));
+  const body = el('div', 'body');
+  const head = el('div', 'head');
+  head.appendChild(el('span', 'author', m.username));
+  head.appendChild(el('span', 'time', formatTime(m.created_at)));
+  body.appendChild(head);
+  body.appendChild(el('div', 'text', m.content));
+  row.appendChild(body);
+  box.appendChild(row);
+  lastDmMsg = m;
+
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 200;
+  if (!animate || nearBottom) dmScrollBottom();
+}
+function dmScrollBottom() { const b = $('dm-messages'); b.scrollTop = b.scrollHeight; }
+
+function sendDm() {
+  const input = $('dm-input');
+  const content = input.value.trim();
+  if (!content || !state.currentDmId) return;
+  sendWs({ type: 'dm_message', thread_id: state.currentDmId, content });
+  input.value = '';
+}
+$('dm-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDm(); }
+  else if (state.currentDmId) sendWs({ type: 'dm_typing', thread_id: state.currentDmId });
+});
+$('dm-send').addEventListener('click', sendDm);
+
+function handleDmMessage(msg) {
+  const m = msg.message;
+  // update thread preview / ordering
+  const th = state.dmThreads.find((t) => t.id === m.thread_id);
+  if (th) { th.preview = m.content; th.last_at = m.created_at; }
+  if (state.view === 'dms' && m.thread_id === state.currentDmId) {
+    appendDmMessage(m);
+  } else {
+    // new activity elsewhere — refresh list and flag the rail
+    loadDms();
+    if (m.user_id !== state.user.id) $('rail-logo').classList.add('has-unread');
+  }
+  if (state.view === 'dms') renderDmList();
+}
+function handleDmTyping(msg) {
+  if (state.view !== 'dms' || msg.thread_id !== state.currentDmId) return;
+  $('dm-typing').textContent = `${msg.user.username} печатает…`;
+  clearTimeout(state.typingTimers['dm' + msg.thread_id]);
+  state.typingTimers['dm' + msg.thread_id] = setTimeout(() => { $('dm-typing').textContent = ''; }, 2500);
 }
 
 /* ======================= Bootstrap ======================= */

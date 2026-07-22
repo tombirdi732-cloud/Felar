@@ -115,6 +115,51 @@
       </div>
     </aside>
 
+    <!-- DM sidebar -->
+    <aside class="sidebar hidden" id="dm-sidebar">
+      <div class="sidebar-header" style="cursor:default">
+        <span class="sidebar-title">Личные сообщения</span>
+      </div>
+      <div class="tree" id="dm-list"></div>
+      <div class="user-bar">
+        <div class="avatar sm" id="me-avatar-dm"></div>
+        <div class="info">
+          <div class="u-name" id="me-name-dm">—</div>
+          <div class="u-status">В сети</div>
+        </div>
+        <div class="u-actions">
+          <button class="icon-btn" id="logout-btn-dm" title="Выйти"><svg class="ic ic-sm"><use href="#i-logout"/></svg></button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- DM view -->
+    <div class="chat hidden" id="dm-view">
+      <div class="chat-main">
+        <div class="chat-toolbar">
+          <div class="left">
+            <div class="avatar sm" id="dm-peer-avatar"></div>
+            <span class="ch-title" id="dm-peer-name">—</span>
+            <div class="divider"></div>
+            <span class="topic" id="dm-peer-status"></span>
+          </div>
+        </div>
+        <div class="messages" id="dm-messages">
+          <div class="empty-hint"><h2>Личные сообщения</h2><p>Выберите диалог слева или напишите участнику сервера.</p></div>
+        </div>
+        <div class="typing" id="dm-typing"></div>
+        <div class="composer">
+          <div class="composer-box">
+            <button class="plus"><svg class="ic ic-lg"><use href="#i-plus"/></svg></button>
+            <input id="dm-input" type="text" maxlength="2000" placeholder="Написать сообщение…" disabled />
+            <div class="tools">
+              <button class="send" id="dm-send"><svg class="ic"><use href="#i-send"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Chat view -->
     <div class="chat" id="chat-view">
       <div class="chat-main">

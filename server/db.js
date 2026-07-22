@@ -65,10 +65,31 @@ db.exec(`
     PRIMARY KEY (message_id, user_id, emoji)
   );
 
+  -- Direct-message threads between two users (user_lo < user_hi).
+  CREATE TABLE IF NOT EXISTS dm_threads (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_lo    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_hi    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    last_at    INTEGER NOT NULL,
+    UNIQUE (user_lo, user_hi)
+  );
+
+  CREATE TABLE IF NOT EXISTS dm_messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id  INTEGER NOT NULL REFERENCES dm_threads(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content    TEXT    NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
   CREATE INDEX IF NOT EXISTS idx_channels_server  ON channels(server_id);
   CREATE INDEX IF NOT EXISTS idx_members_server    ON memberships(server_id);
   CREATE INDEX IF NOT EXISTS idx_reactions_msg     ON reactions(message_id);
+  CREATE INDEX IF NOT EXISTS idx_dm_threads_lo     ON dm_threads(user_lo);
+  CREATE INDEX IF NOT EXISTS idx_dm_threads_hi     ON dm_threads(user_hi);
+  CREATE INDEX IF NOT EXISTS idx_dm_messages_thread ON dm_messages(thread_id, id);
 `);
 
 // --- lightweight migrations for databases created before these columns ---
