@@ -22,10 +22,30 @@ const el = (tag, cls, text) => {
   return n;
 };
 
+/* --------------------- server address ---------------------
+   In the browser the client talks to the same origin that served it.
+   In the desktop (Electron) and mobile (Capacitor) apps the page is
+   loaded from a local file, so the backend address must be configured
+   explicitly and is stored in localStorage. */
+function getServerBase() {
+  const saved = (localStorage.getItem('felar_server') || '').trim();
+  if (saved) return saved.replace(/\/+$/, '');
+  // Web build: default to same origin.
+  if (location.protocol === 'http:' || location.protocol === 'https:') return '';
+  return '';
+}
+
+function wsBase() {
+  const base = getServerBase();
+  if (base) return base.replace(/^http/, 'ws');
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${location.host}`;
+}
+
 async function api(path, { method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${getServerBase()}/api${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
@@ -68,10 +88,26 @@ $('auth-switch-link').addEventListener('click', (e) => {
   renderAuthMode();
 });
 
+// Server-address settings: shown on demand, prefilled from storage.
+$('server-toggle').addEventListener('click', (e) => {
+  e.preventDefault();
+  const f = $('server-field');
+  f.classList.toggle('hidden');
+  if (!f.classList.contains('hidden')) $('auth-server').focus();
+});
+$('auth-server').value = localStorage.getItem('felar_server') || '';
+// In packaged apps (no http origin) the server field is required — reveal it.
+if (location.protocol !== 'http:' && location.protocol !== 'https:') {
+  $('server-field').classList.remove('hidden');
+}
+
 $('auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = $('auth-username').value.trim();
   const password = $('auth-password').value;
+  const serverAddr = $('auth-server').value.trim();
+  if (serverAddr) localStorage.setItem('felar_server', serverAddr);
+  else localStorage.removeItem('felar_server');
   try {
     const data = await api(`/auth/${authMode}`, {
       method: 'POST',
@@ -319,8 +355,7 @@ $('toggle-members').addEventListener('click', () => {
 
 /* ======================= WebSocket ======================= */
 function connectWebSocket() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws?token=${state.token}`);
+  const ws = new WebSocket(`${wsBase()}/ws?token=${state.token}`);
   state.ws = ws;
 
   ws.addEventListener('message', (e) => {

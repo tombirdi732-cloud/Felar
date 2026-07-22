@@ -44,6 +44,32 @@ npm start           # http://localhost:3000
    инкогнито, зарегистрируйте второго пользователя и войдите по коду.
 4. Пишите сообщения — они доставляются мгновенно.
 
+## Приложения для ПК и телефона
+
+Клиент один и тот же (папка `public/`), он оборачивается в нативные приложения.
+Приложения — это **клиенты**: они подключаются к запущенному где-то бэкенду по
+адресу, который вводится на экране входа («Настройки сервера») и сохраняется.
+
+### ПК (Windows / macOS / Linux) — Electron
+
+```bash
+npm install            # включает electron (devDependency)
+npm run desktop        # запустить приложение в режиме разработки
+npm run desktop:build  # собрать установщик (.exe / .dmg / AppImage) в dist-desktop/
+```
+
+### Телефон (Android / iOS) — Capacitor
+
+```bash
+npm install
+npx cap add android            # один раз: создаёт нативный проект
+npm run mobile:sync            # скопировать web-клиент в нативный проект
+npm run mobile:android         # открыть в Android Studio → собрать APK
+# для iOS: npx cap add ios && npm run mobile:ios  (нужен macOS + Xcode)
+```
+
+> Иконка приложения берётся из `public/assets/icons/app-icon.png` (1024×1024).
+
 ## Структура проекта
 
 ```

@@ -1,0 +1,9 @@
+{
+  "appId": "com.felar.app",
+  "appName": "Felar",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https"
+  },
+  "backgroundColor": "#313338"
+}

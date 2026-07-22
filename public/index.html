@@ -4,14 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Felar</title>
+  <link rel="icon" href="/assets/icons/favicon.png" />
   <link rel="stylesheet" href="/css/style.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/css/theme.css" />
 </head>
 <body>
   <!-- ===================== Auth screen ===================== -->
   <div id="auth" class="auth-screen">
     <div class="auth-card">
-      <div class="auth-logo">Felar</div>
+      <div class="auth-logo">
+        <img src="/assets/icons/logo.png" alt="Felar" class="auth-logo-img"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
+        <span class="auth-logo-text" style="display:none">Felar</span>
+      </div>
       <p class="auth-sub" id="auth-sub">С возвращением! Мы рады видеть тебя снова.</p>
 
       <form id="auth-form" autocomplete="off">
@@ -21,6 +26,11 @@
         <label class="field-label">Пароль</label>
         <input id="auth-password" class="field-input" type="password" minlength="6" required />
 
+        <div id="server-field" class="hidden">
+          <label class="field-label">Адрес сервера</label>
+          <input id="auth-server" class="field-input" type="text" placeholder="https://felar.example.com" />
+        </div>
+
         <div id="auth-error" class="auth-error"></div>
 
         <button type="submit" id="auth-submit" class="btn-primary">Войти</button>
@@ -29,6 +39,9 @@
       <p class="auth-switch">
         <span id="auth-switch-text">Нужен аккаунт?</span>
         <a href="#" id="auth-switch-link">Зарегистрироваться</a>
+      </p>
+      <p class="auth-switch">
+        <a href="#" id="server-toggle">Настройки сервера</a>
       </p>
     </div>
   </div>
