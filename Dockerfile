@@ -10,9 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Install production dependencies first (better layer caching).
-COPY package.json package-lock.json ./
+COPY package.json ./
 # Server needs only runtime deps — skip dev (electron) and optional (capacitor).
-RUN npm ci --omit=dev --omit=optional
+# Using `npm install` (not `npm ci`) so a lockfile that also lists desktop/mobile
+# dev deps doesn't block the server build.
+RUN npm install --omit=dev --omit=optional --no-audit --no-fund
 
 # App source.
 COPY server ./server
