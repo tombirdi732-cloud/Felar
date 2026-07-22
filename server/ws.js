@@ -139,6 +139,18 @@ function handleMessage(ws, raw) {
     const otherId = thread.user_lo === ws.userId ? thread.user_hi : thread.user_lo;
     const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(ws.userId);
     sendToUser(otherId, { type: 'dm_typing', thread_id: threadId, user });
+    return;
+  }
+
+  // WebRTC call signaling — relayed to the other DM participant untouched.
+  const CALL_TYPES = ['call_offer', 'call_answer', 'call_ice', 'call_decline', 'call_end', 'call_busy'];
+  if (CALL_TYPES.includes(msg.type)) {
+    const threadId = Number(msg.thread_id);
+    const thread = db.prepare('SELECT * FROM dm_threads WHERE id = ?').get(threadId);
+    if (!thread || (thread.user_lo !== ws.userId && thread.user_hi !== ws.userId)) return;
+    const otherId = thread.user_lo === ws.userId ? thread.user_hi : thread.user_lo;
+    const from = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(ws.userId);
+    sendToUser(otherId, { ...msg, from });
   }
 }
 

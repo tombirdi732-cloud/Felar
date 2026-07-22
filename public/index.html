@@ -37,6 +37,11 @@
       <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".8" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".8" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C22 6 17.5 2 12 2z"/></symbol>
       <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
       <symbol id="i-pin" viewBox="0 0 24 24"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6l1-1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2l1 1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+      <symbol id="i-phone-off" viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" x2="2" y1="2" y2="22"/></symbol>
+      <symbol id="i-video" viewBox="0 0 24 24"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></symbol>
+      <symbol id="i-video-off" viewBox="0 0 24 24"><path d="M10.66 6H14a2 2 0 0 1 2 2v2.34l1 1L22 8v8"/><path d="M16 16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2l10 10Z"/><line x1="2" x2="22" y1="2" y2="22"/></symbol>
+      <symbol id="i-mic-off" viewBox="0 0 24 24"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
     </defs>
   </svg>
 
@@ -142,6 +147,10 @@
             <span class="ch-title" id="dm-peer-name">—</span>
             <div class="divider"></div>
             <span class="topic" id="dm-peer-status"></span>
+          </div>
+          <div class="right">
+            <button class="icon-btn" id="dm-call-audio" title="Аудиозвонок"><svg class="ic"><use href="#i-phone"/></svg></button>
+            <button class="icon-btn" id="dm-call-video" title="Видеозвонок"><svg class="ic"><use href="#i-video"/></svg></button>
           </div>
         </div>
         <div class="messages" id="dm-messages">
@@ -289,6 +298,36 @@
       <input id="new-channel-name" class="field-input" type="text" maxlength="24" placeholder="новости" />
       <button class="btn-primary" id="create-channel-btn">Создать</button>
       <div class="modal-error" id="channel-modal-error"></div>
+    </div>
+  </div>
+
+  <!-- ===================== Calls ===================== -->
+  <div id="incoming-call" class="call-incoming hidden">
+    <div class="call-incoming-card">
+      <div class="avatar lg" id="incoming-avatar"></div>
+      <div class="call-incoming-name" id="incoming-name">—</div>
+      <div class="call-incoming-sub" id="incoming-sub">Входящий звонок</div>
+      <div class="call-incoming-actions">
+        <button class="call-btn decline" id="incoming-decline" title="Отклонить"><svg class="ic ic-lg"><use href="#i-phone-off"/></svg></button>
+        <button class="call-btn accept" id="incoming-accept" title="Принять"><svg class="ic ic-lg"><use href="#i-phone"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="call-overlay" class="call-overlay hidden">
+    <div class="call-stage">
+      <video id="remote-video" class="remote-video" autoplay playsinline></video>
+      <div class="call-remote-info" id="call-remote-info">
+        <div class="avatar xl" id="call-remote-avatar"></div>
+        <div class="call-remote-name" id="call-remote-name">—</div>
+        <div class="call-status" id="call-status">Соединение…</div>
+      </div>
+      <video id="local-video" class="local-video hidden" autoplay playsinline muted></video>
+    </div>
+    <div class="call-controls">
+      <button class="call-ctrl" id="ctrl-mic" title="Микрофон"><svg class="ic ic-lg"><use href="#i-mic"/></svg></button>
+      <button class="call-ctrl" id="ctrl-cam" title="Камера"><svg class="ic ic-lg"><use href="#i-video"/></svg></button>
+      <button class="call-ctrl hangup" id="ctrl-hangup" title="Завершить"><svg class="ic ic-lg"><use href="#i-phone-off"/></svg></button>
     </div>
   </div>
 

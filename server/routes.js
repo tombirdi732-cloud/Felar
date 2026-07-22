@@ -68,6 +68,19 @@ router.get('/me', authRequired, (req, res) => {
   res.json({ user: req.user });
 });
 
+// WebRTC ICE configuration for calls (public STUN + optional TURN via env).
+router.get('/rtc-config', authRequired, (req, res) => {
+  const iceServers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.ROOST_TURN_URL) {
+    iceServers.push({
+      urls: process.env.ROOST_TURN_URL,
+      username: process.env.ROOST_TURN_USERNAME || undefined,
+      credential: process.env.ROOST_TURN_CREDENTIAL || undefined,
+    });
+  }
+  res.json({ iceServers });
+});
+
 // Update the current user's profile (currently: avatar URL).
 router.patch('/me', authRequired, (req, res) => {
   if (req.body?.avatar !== undefined) {
