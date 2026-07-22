@@ -7,7 +7,7 @@ import {
   signToken,
   authRequired,
 } from './auth.js';
-import { broadcastToServer, isOnline } from './hub.js';
+import { broadcastToServer, isOnline, sendToUser } from './hub.js';
 
 const router = Router();
 const now = () => Date.now();
@@ -177,6 +177,97 @@ router.post('/servers/:id/channels', authRequired, (req, res) => {
   const channel = { id: info.lastInsertRowid, name, position: maxPos + 1 };
   broadcastToServer(serverId, { type: 'channel_created', server_id: serverId, channel });
   res.json({ channel });
+});
+
+/* ---------------------- Server management ---------------------- */
+
+// Helper: load a server and assert the current user owns it.
+function assertOwner(serverId, userId) {
+  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
+  if (!server) return { error: 404 };
+  if (server.owner_id !== userId) return { error: 403 };
+  return { server };
+}
+
+// Rename a server (owner only).
+router.patch('/servers/:id', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const { server, error } = assertOwner(serverId, req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец может изменять сервер' });
+
+  const name = String(req.body?.name || '').trim();
+  if (name.length < 2 || name.length > 40) return res.status(400).json({ error: 'Название: от 2 до 40 символов' });
+
+  db.prepare('UPDATE servers SET name = ? WHERE id = ?').run(name, serverId);
+  broadcastToServer(serverId, { type: 'server_updated', server_id: serverId, name });
+  res.json({ ok: true, name });
+});
+
+// Delete a server (owner only).
+router.delete('/servers/:id', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const { error } = assertOwner(serverId, req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец может удалить сервер' });
+
+  broadcastToServer(serverId, { type: 'server_deleted', server_id: serverId });
+  db.prepare('DELETE FROM servers WHERE id = ?').run(serverId); // cascades channels/messages/memberships
+  res.json({ ok: true });
+});
+
+// Leave a server (any member except the owner — the owner must delete it).
+router.post('/servers/:id/leave', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  if (server.owner_id === req.user.id)
+    return res.status(400).json({ error: 'Владелец не может выйти — удалите сервер' });
+
+  db.prepare('DELETE FROM memberships WHERE user_id = ? AND server_id = ?').run(req.user.id, serverId);
+  broadcastToServer(serverId, { type: 'member_left', server_id: serverId, user_id: req.user.id });
+  res.json({ ok: true });
+});
+
+// Kick a member (owner only).
+router.delete('/servers/:id/members/:userId', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const targetId = Number(req.params.userId);
+  const { error } = assertOwner(serverId, req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец может исключать участников' });
+  if (targetId === req.user.id) return res.status(400).json({ error: 'Нельзя исключить себя' });
+
+  db.prepare('DELETE FROM memberships WHERE user_id = ? AND server_id = ?').run(targetId, serverId);
+  broadcastToServer(serverId, { type: 'member_left', server_id: serverId, user_id: targetId });
+  sendToUser(targetId, { type: 'server_removed', server_id: serverId });
+  res.json({ ok: true });
+});
+
+// Rename a channel (owner only).
+router.patch('/channels/:id', authRequired, (req, res) => {
+  const channelId = Number(req.params.id);
+  const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
+  if (!channel) return res.status(404).json({ error: 'Канал не найден' });
+  const { error } = assertOwner(channel.server_id, req.user.id);
+  if (error) return res.status(403).json({ error: 'Только владелец может изменять каналы' });
+
+  let name = String(req.body?.name || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9а-яё_-]/g, '');
+  if (name.length < 1 || name.length > 24) return res.status(400).json({ error: 'Некорректное имя канала' });
+
+  db.prepare('UPDATE channels SET name = ? WHERE id = ?').run(name, channelId);
+  broadcastToServer(channel.server_id, { type: 'channel_updated', server_id: channel.server_id, channel: { id: channelId, name } });
+  res.json({ ok: true, name });
+});
+
+// Delete a channel (owner only).
+router.delete('/channels/:id', authRequired, (req, res) => {
+  const channelId = Number(req.params.id);
+  const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
+  if (!channel) return res.status(404).json({ error: 'Канал не найден' });
+  const { error } = assertOwner(channel.server_id, req.user.id);
+  if (error) return res.status(403).json({ error: 'Только владелец может удалять каналы' });
+
+  db.prepare('DELETE FROM channels WHERE id = ?').run(channelId);
+  broadcastToServer(channel.server_id, { type: 'channel_deleted', server_id: channel.server_id, channel_id: channelId });
+  res.json({ ok: true });
 });
 
 /* --------------------------- Messages --------------------------- */

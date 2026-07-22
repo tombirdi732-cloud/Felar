@@ -623,7 +623,13 @@ function handleWsEvent(msg) {
     case 'reaction_updated': handleReactionUpdated(msg); break;
     case 'presence': setPresence(msg.user.id, msg.online); break;
     case 'member_joined': if (msg.server_id === state.currentServerId) loadMembers(msg.server_id); break;
+    case 'member_left': handleMemberLeft(msg); break;
     case 'channel_created': handleChannelCreated(msg); break;
+    case 'channel_updated': applyChannelUpdate(msg.server_id, msg.channel); break;
+    case 'channel_deleted': removeChannelLocally(msg.server_id, msg.channel_id); break;
+    case 'server_updated': applyServerUpdate(msg.server_id, msg.name); break;
+    case 'server_deleted': removeServerLocally(msg.server_id); break;
+    case 'server_removed': removeServerLocally(msg.server_id); break;
     case 'typing': showTyping(msg); break;
   }
 }
@@ -717,6 +723,141 @@ $('create-channel-btn').addEventListener('click', async () => {
     selectChannel(channel.id);
   } catch (err) { $('channel-modal-error').textContent = err.message; }
 });
+
+/* ======================= Server settings ======================= */
+function openServerSettings() {
+  const server = state.servers.find((s) => s.id === state.currentServerId);
+  if (!server) return;
+  const isOwner = server.owner_id === state.user.id;
+  const body = $('ss-body');
+  body.innerHTML = '';
+  $('ss-error').textContent = '';
+
+  if (isOwner) {
+    body.appendChild(el('div', 'field-label', 'Название сервера'));
+    const nameRow = el('div', 'ss-inline');
+    const nameInput = el('input', 'field-input');
+    nameInput.value = server.name; nameInput.maxLength = 40;
+    const saveName = el('button', 'btn-mini', 'Сохранить');
+    saveName.addEventListener('click', async () => {
+      try { await api(`/servers/${server.id}`, { method: 'PATCH', body: { name: nameInput.value.trim() } }); saveName.textContent = 'Готово'; setTimeout(() => (saveName.textContent = 'Сохранить'), 1000); }
+      catch (e) { $('ss-error').textContent = e.message; }
+    });
+    nameRow.appendChild(nameInput); nameRow.appendChild(saveName);
+    body.appendChild(nameRow);
+
+    body.appendChild(el('div', 'field-label', 'Каналы'));
+    for (const ch of server.channels) {
+      const row = el('div', 'ss-row');
+      const inp = el('input', 'ss-row-input'); inp.value = ch.name;
+      const rn = el('button', 'icon-btn'); rn.appendChild(icon('edit', 'ic ic-sm')); rn.title = 'Переименовать';
+      rn.addEventListener('click', async () => {
+        try { await api(`/channels/${ch.id}`, { method: 'PATCH', body: { name: inp.value.trim() } }); }
+        catch (e) { $('ss-error').textContent = e.message; }
+      });
+      const del = el('button', 'icon-btn danger'); del.appendChild(icon('x', 'ic ic-sm')); del.title = 'Удалить канал';
+      del.addEventListener('click', async () => {
+        if (!confirm(`Удалить канал #${ch.name}?`)) return;
+        try { await api(`/channels/${ch.id}`, { method: 'DELETE' }); openServerSettings(); }
+        catch (e) { $('ss-error').textContent = e.message; }
+      });
+      row.appendChild(inp); row.appendChild(rn); row.appendChild(del);
+      body.appendChild(row);
+    }
+
+    body.appendChild(el('div', 'field-label', 'Участники'));
+    for (const m of state.members) {
+      const row = el('div', 'ss-row');
+      row.appendChild(avatarEl(m.username, { size: 'sm' }));
+      row.appendChild(el('span', 'ss-member-name', m.username + (m.id === server.owner_id ? ' · владелец' : '')));
+      if (m.id !== server.owner_id) {
+        const kick = el('button', 'btn-mini danger', 'Кик');
+        kick.addEventListener('click', async () => {
+          if (!confirm(`Исключить ${m.username}?`)) return;
+          try { await api(`/servers/${server.id}/members/${m.id}`, { method: 'DELETE' }); loadMembers(server.id).then(() => openServerSettings()); }
+          catch (e) { $('ss-error').textContent = e.message; }
+        });
+        row.appendChild(kick);
+      }
+      body.appendChild(row);
+    }
+
+    const danger = el('button', 'btn-danger', 'Удалить сервер');
+    danger.addEventListener('click', async () => {
+      if (!confirm(`Удалить сервер «${server.name}»? Это необратимо.`)) return;
+      try { await api(`/servers/${server.id}`, { method: 'DELETE' }); $('server-settings-overlay').classList.add('hidden'); }
+      catch (e) { $('ss-error').textContent = e.message; }
+    });
+    body.appendChild(danger);
+  } else {
+    const p = el('p', 's-desc', 'Ты участник этого сервера.'); p.style.margin = '4px 0 16px';
+    body.appendChild(p);
+    const leave = el('button', 'btn-danger', 'Выйти с сервера');
+    leave.addEventListener('click', async () => {
+      if (!confirm('Выйти с сервера?')) return;
+      try { await api(`/servers/${server.id}/leave`, { method: 'POST' }); removeServerLocally(server.id); $('server-settings-overlay').classList.add('hidden'); }
+      catch (e) { $('ss-error').textContent = e.message; }
+    });
+    body.appendChild(leave);
+  }
+
+  $('server-settings-overlay').classList.remove('hidden');
+}
+document.querySelector('.sidebar-header').addEventListener('click', () => {
+  if (state.currentServerId) openServerSettings();
+});
+$('ss-close').addEventListener('click', () => $('server-settings-overlay').classList.add('hidden'));
+$('server-settings-overlay').addEventListener('click', (e) => { if (e.target === $('server-settings-overlay')) $('server-settings-overlay').classList.add('hidden'); });
+
+// --- local state updates driven by WS events ---
+function applyServerUpdate(id, name) {
+  const s = state.servers.find((x) => x.id === id);
+  if (!s) return;
+  s.name = name;
+  if (id === state.currentServerId) $('server-name').textContent = name;
+  renderRail();
+}
+function removeServerLocally(id) {
+  const idx = state.servers.findIndex((s) => s.id === id);
+  if (idx < 0) return;
+  state.servers.splice(idx, 1);
+  if (state.currentServerId === id) {
+    state.currentServerId = null; state.currentChannelId = null;
+    if (state.servers.length) { showView('chat'); selectServer(state.servers[0].id); }
+    else { renderRail(); renderTree(); resetChat(); $('server-name').textContent = 'Нет серверов'; }
+  } else renderRail();
+}
+function applyChannelUpdate(serverId, channel) {
+  const s = state.servers.find((x) => x.id === serverId);
+  if (!s) return;
+  const ch = s.channels.find((c) => c.id === channel.id);
+  if (ch) ch.name = channel.name;
+  if (serverId === state.currentServerId) {
+    renderTree();
+    if (state.currentChannelId === channel.id) {
+      $('channel-name').textContent = channel.name;
+      $('channel-topic').textContent = 'Канал #' + channel.name;
+      $('composer-input').placeholder = 'Написать в #' + channel.name;
+    }
+  }
+}
+function removeChannelLocally(serverId, channelId) {
+  const s = state.servers.find((x) => x.id === serverId);
+  if (!s) return;
+  s.channels = s.channels.filter((c) => c.id !== channelId);
+  if (serverId === state.currentServerId) {
+    if (state.currentChannelId === channelId) {
+      if (s.channels.length) selectChannel(s.channels[0].id);
+      else { state.currentChannelId = null; renderTree(); resetChat(); }
+    } else renderTree();
+  }
+}
+function handleMemberLeft(msg) {
+  if (msg.server_id !== state.currentServerId) return;
+  loadMembers(msg.server_id).then(() => {
+    if (!$('server-settings-overlay').classList.contains('hidden')) openServerSettings();
+  });
+}
 
 /* ======================= Bootstrap ======================= */
 (async function init() {
