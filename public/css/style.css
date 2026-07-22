@@ -412,6 +412,9 @@ input, textarea { font-family: inherit; }
   color: var(--foreground); font-size: 14px; padding: 7px 10px; outline: none; }
 .ss-row-input:focus { border-color: rgba(232,162,58,0.4); }
 .ss-member-name { flex: 1; font-size: 14px; color: var(--foreground); }
+.ss-role-select { background: var(--input-bg); color: var(--foreground); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 8px; font-size: 13px; outline: none; }
+.ss-role-select:focus { border-color: rgba(232,162,58,0.4); }
 .btn-danger { width: 100%; margin-top: 20px; padding: 11px; border: 1px solid rgba(229,62,62,0.4);
   border-radius: 8px; background: rgba(229,62,62,0.1); color: var(--danger); font-weight: 600; font-size: 14px; }
 .btn-danger:hover { background: rgba(229,62,62,0.2); }

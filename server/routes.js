@@ -181,15 +181,22 @@ router.get('/servers/:id/members', authRequired, (req, res) => {
   if (!assertMember(req.user.id, serverId))
     return res.status(403).json({ error: 'Нет доступа' });
 
+  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
   const rows = db
     .prepare(
-      `SELECT u.id, u.username, u.avatar FROM users u
+      `SELECT u.id, u.username, u.avatar, m.role FROM users u
        JOIN memberships m ON m.user_id = u.id
        WHERE m.server_id = ?
        ORDER BY u.username`
     )
     .all(serverId);
-  const members = rows.map((u) => ({ ...u, online: isOnline(u.id) }));
+  const members = rows.map((u) => ({
+    id: u.id,
+    username: u.username,
+    avatar: u.avatar,
+    role: server && u.id === server.owner_id ? 'owner' : (u.role || 'member'),
+    online: isOnline(u.id),
+  }));
   res.json({ members });
 });
 
@@ -198,8 +205,8 @@ router.post('/servers/:id/channels', authRequired, (req, res) => {
   const serverId = Number(req.params.id);
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
   if (!server) return res.status(404).json({ error: 'Сервер не найден' });
-  if (server.owner_id !== req.user.id)
-    return res.status(403).json({ error: 'Только владелец может создавать каналы' });
+  if (!canManage(getRole(req.user.id, serverId)))
+    return res.status(403).json({ error: 'Недостаточно прав' });
 
   let name = String(req.body?.name || '').trim().toLowerCase().replace(/\s+/g, '-');
   name = name.replace(/[^a-z0-9а-яё_-]/g, '');
@@ -226,6 +233,25 @@ function assertOwner(serverId, userId) {
   if (!server) return { error: 404 };
   if (server.owner_id !== userId) return { error: 403 };
   return { server };
+}
+
+// A user's role on a server: 'owner' | 'admin' | 'member' | null (not a member).
+function getRole(userId, serverId) {
+  const s = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
+  if (!s) return null;
+  if (s.owner_id === userId) return 'owner';
+  const m = db.prepare('SELECT role FROM memberships WHERE user_id = ? AND server_id = ?').get(userId, serverId);
+  return m ? (m.role || 'member') : null;
+}
+function canManage(role) { return role === 'owner' || role === 'admin'; }
+
+// Assert the current user can manage (owner or admin) the given server.
+function assertManage(serverId, userId) {
+  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
+  if (!server) return { error: 404 };
+  const role = getRole(userId, serverId);
+  if (!canManage(role)) return { error: 403 };
+  return { server, role };
 }
 
 // Rename a server (owner only).
@@ -270,9 +296,15 @@ router.post('/servers/:id/leave', authRequired, (req, res) => {
 router.delete('/servers/:id/members/:userId', authRequired, (req, res) => {
   const serverId = Number(req.params.id);
   const targetId = Number(req.params.userId);
-  const { error } = assertOwner(serverId, req.user.id);
-  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец может исключать участников' });
+  const { role: actorRole, error } = assertManage(serverId, req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Недостаточно прав' });
   if (targetId === req.user.id) return res.status(400).json({ error: 'Нельзя исключить себя' });
+
+  const targetRole = getRole(targetId, serverId);
+  if (!targetRole) return res.status(404).json({ error: 'Участник не найден' });
+  const rank = { owner: 3, admin: 2, member: 1 };
+  if (rank[targetRole] >= rank[actorRole])
+    return res.status(403).json({ error: 'Недостаточно прав для этого участника' });
 
   db.prepare('DELETE FROM memberships WHERE user_id = ? AND server_id = ?').run(targetId, serverId);
   broadcastToServer(serverId, { type: 'member_left', server_id: serverId, user_id: targetId });
@@ -280,13 +312,32 @@ router.delete('/servers/:id/members/:userId', authRequired, (req, res) => {
   res.json({ ok: true });
 });
 
+// Assign a role to a member (owner only): 'admin' or 'member'.
+router.patch('/servers/:id/members/:userId/role', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const targetId = Number(req.params.userId);
+  const { error } = assertOwner(serverId, req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец назначает роли' });
+
+  const role = String(req.body?.role || '');
+  if (!['admin', 'member'].includes(role)) return res.status(400).json({ error: 'Некорректная роль' });
+  if (targetId === req.user.id) return res.status(400).json({ error: 'Нельзя изменить свою роль' });
+
+  const membership = db.prepare('SELECT 1 FROM memberships WHERE user_id = ? AND server_id = ?').get(targetId, serverId);
+  if (!membership) return res.status(404).json({ error: 'Участник не найден' });
+
+  db.prepare('UPDATE memberships SET role = ? WHERE user_id = ? AND server_id = ?').run(role, targetId, serverId);
+  broadcastToServer(serverId, { type: 'member_role', server_id: serverId, user_id: targetId, role });
+  res.json({ ok: true, role });
+});
+
 // Rename a channel (owner only).
 router.patch('/channels/:id', authRequired, (req, res) => {
   const channelId = Number(req.params.id);
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
   if (!channel) return res.status(404).json({ error: 'Канал не найден' });
-  const { error } = assertOwner(channel.server_id, req.user.id);
-  if (error) return res.status(403).json({ error: 'Только владелец может изменять каналы' });
+  if (!canManage(getRole(req.user.id, channel.server_id)))
+    return res.status(403).json({ error: 'Недостаточно прав' });
 
   let name = String(req.body?.name || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9а-яё_-]/g, '');
   if (name.length < 1 || name.length > 24) return res.status(400).json({ error: 'Некорректное имя канала' });
@@ -301,8 +352,8 @@ router.delete('/channels/:id', authRequired, (req, res) => {
   const channelId = Number(req.params.id);
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
   if (!channel) return res.status(404).json({ error: 'Канал не найден' });
-  const { error } = assertOwner(channel.server_id, req.user.id);
-  if (error) return res.status(403).json({ error: 'Только владелец может удалять каналы' });
+  if (!canManage(getRole(req.user.id, channel.server_id)))
+    return res.status(403).json({ error: 'Недостаточно прав' });
 
   db.prepare('DELETE FROM channels WHERE id = ?').run(channelId);
   broadcastToServer(channel.server_id, { type: 'channel_deleted', server_id: channel.server_id, channel_id: channelId });
@@ -396,7 +447,7 @@ router.patch('/messages/:id', authRequired, (req, res) => {
 router.delete('/messages/:id', authRequired, (req, res) => {
   const { message, error } = loadMessageForUser(Number(req.params.id), req.user.id);
   if (error) return res.status(error).json({ error: error === 404 ? 'Сообщение не найдено' : 'Нет доступа' });
-  if (message.user_id !== req.user.id && message.owner_id !== req.user.id)
+  if (message.user_id !== req.user.id && !canManage(getRole(req.user.id, message.server_id)))
     return res.status(403).json({ error: 'Нет прав на удаление' });
 
   db.prepare('DELETE FROM messages WHERE id = ?').run(message.id);

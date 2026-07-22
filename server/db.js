@@ -49,6 +49,7 @@ db.exec(`
     user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
     joined_at INTEGER NOT NULL,
+    role      TEXT    NOT NULL DEFAULT 'member',
     PRIMARY KEY (user_id, server_id)
   );
 
@@ -115,5 +116,6 @@ ensureColumn('dm_messages', 'attachment_url', 'TEXT');
 ensureColumn('dm_messages', 'attachment_name', 'TEXT');
 ensureColumn('dm_messages', 'attachment_type', 'TEXT');
 ensureColumn('users', 'avatar', 'TEXT');
+ensureColumn('memberships', 'role', "TEXT NOT NULL DEFAULT 'member'");
 
 export default db;
