@@ -1,0 +1,22 @@
+# Minimal deployment: just the Roost backend.
+# Access it at http://SERVER_IP:3000 immediately (HTTP).
+# For HTTPS with a domain, use deploy/docker-compose.caddy.yml instead.
+
+services:
+  roost:
+    build: .
+    image: roost:latest
+    container_name: roost
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # CHANGE THIS to a long random string in production!
+      JWT_SECRET: ${JWT_SECRET:-change-me-please}
+      ROOST_DB: /data/roost.db
+      PORT: "3000"
+    volumes:
+      - roost-data:/data
+
+volumes:
+  roost-data:

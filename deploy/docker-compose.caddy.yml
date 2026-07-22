@@ -1,0 +1,45 @@
+# Production deployment with automatic HTTPS via Caddy.
+# Requires a domain pointed (A-record) at your server's IP.
+#
+# Usage (from the project root):
+#   DOMAIN=roost.example.com EMAIL=you@mail.ru JWT_SECRET=$(openssl rand -hex 32) \
+#     docker compose -f deploy/docker-compose.caddy.yml up -d --build
+#
+# Caddy obtains and renews a free Let's Encrypt certificate automatically.
+
+services:
+  roost:
+    build: ..
+    image: roost:latest
+    container_name: roost
+    restart: always
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      ROOST_DB: /data/roost.db
+      PORT: "3000"
+    volumes:
+      - roost-data:/data
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2
+    container_name: roost-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      EMAIL: ${EMAIL:?set EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - roost
+
+volumes:
+  roost-data:
+  caddy-data:
+  caddy-config:

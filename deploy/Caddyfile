@@ -1,0 +1,9 @@
+# Caddy reverse proxy for Roost.
+# {$DOMAIN} and {$EMAIL} are injected from the compose environment.
+# WebSocket upgrades are proxied transparently by Caddy — no extra config needed.
+
+{$DOMAIN} {
+	tls {$EMAIL}
+	encode gzip
+	reverse_proxy roost:3000
+}

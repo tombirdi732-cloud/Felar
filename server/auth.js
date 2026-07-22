@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import db from './db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'felar-dev-secret-change-me';
+const JWT_SECRET = process.env.JWT_SECRET || 'roost-dev-secret-change-me';
 const TOKEN_TTL = '7d';
 
 export function hashPassword(plain) {

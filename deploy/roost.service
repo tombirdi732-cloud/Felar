@@ -1,0 +1,26 @@
+# systemd unit for running Roost without Docker.
+# Install:
+#   sudo cp deploy/roost.service /etc/systemd/system/roost.service
+#   (edit paths/User below if your setup differs)
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now roost
+# Logs:  journalctl -u roost -f
+
+[Unit]
+Description=Roost messenger backend
+After=network.target
+
+[Service]
+Type=simple
+User=roost
+WorkingDirectory=/opt/roost
+# Load PORT / JWT_SECRET / ROOST_DB from this file (see .env.example)
+EnvironmentFile=/opt/roost/.env
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=3
+# Persist the SQLite database here.
+Environment=ROOST_DB=/opt/roost/data/roost.db
+
+[Install]
+WantedBy=multi-user.target

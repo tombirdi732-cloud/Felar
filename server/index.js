@@ -32,5 +32,5 @@ const server = http.createServer(app);
 attachWebSocket(server);
 
 server.listen(PORT, () => {
-  console.log(`Felar server running on http://localhost:${PORT}`);
+  console.log(`Roost server running on http://localhost:${PORT}`);
 });

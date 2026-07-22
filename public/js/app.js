@@ -1,9 +1,9 @@
 /* ============================================================
-   Felar — client application
+   Roost — client application
    ============================================================ */
 
 const state = {
-  token: localStorage.getItem('felar_token') || null,
+  token: localStorage.getItem('roost_token') || null,
   user: null,
   servers: [],
   currentServerId: null,
@@ -28,7 +28,7 @@ const el = (tag, cls, text) => {
    loaded from a local file, so the backend address must be configured
    explicitly and is stored in localStorage. */
 function getServerBase() {
-  const saved = (localStorage.getItem('felar_server') || '').trim();
+  const saved = (localStorage.getItem('roost_server') || '').trim();
   if (saved) return saved.replace(/\/+$/, '');
   // Web build: default to same origin.
   if (location.protocol === 'http:' || location.protocol === 'https:') return '';
@@ -75,7 +75,7 @@ function renderAuthMode() {
   const isLogin = authMode === 'login';
   $('auth-sub').textContent = isLogin
     ? 'С возвращением! Мы рады видеть тебя снова.'
-    : 'Создай аккаунт, чтобы присоединиться к Felar.';
+    : 'Создай аккаунт, чтобы присоединиться к Roost.';
   $('auth-submit').textContent = isLogin ? 'Войти' : 'Зарегистрироваться';
   $('auth-switch-text').textContent = isLogin ? 'Нужен аккаунт?' : 'Уже есть аккаунт?';
   $('auth-switch-link').textContent = isLogin ? 'Зарегистрироваться' : 'Войти';
@@ -95,7 +95,7 @@ $('server-toggle').addEventListener('click', (e) => {
   f.classList.toggle('hidden');
   if (!f.classList.contains('hidden')) $('auth-server').focus();
 });
-$('auth-server').value = localStorage.getItem('felar_server') || '';
+$('auth-server').value = localStorage.getItem('roost_server') || '';
 // In packaged apps (no http origin) the server field is required — reveal it.
 if (location.protocol !== 'http:' && location.protocol !== 'https:') {
   $('server-field').classList.remove('hidden');
@@ -106,8 +106,8 @@ $('auth-form').addEventListener('submit', async (e) => {
   const username = $('auth-username').value.trim();
   const password = $('auth-password').value;
   const serverAddr = $('auth-server').value.trim();
-  if (serverAddr) localStorage.setItem('felar_server', serverAddr);
-  else localStorage.removeItem('felar_server');
+  if (serverAddr) localStorage.setItem('roost_server', serverAddr);
+  else localStorage.removeItem('roost_server');
   try {
     const data = await api(`/auth/${authMode}`, {
       method: 'POST',
@@ -115,7 +115,7 @@ $('auth-form').addEventListener('submit', async (e) => {
     });
     state.token = data.token;
     state.user = data.user;
-    localStorage.setItem('felar_token', data.token);
+    localStorage.setItem('roost_token', data.token);
     await startApp();
   } catch (err) {
     $('auth-error').textContent = err.message;
@@ -123,7 +123,7 @@ $('auth-form').addEventListener('submit', async (e) => {
 });
 
 function logout() {
-  localStorage.removeItem('felar_token');
+  localStorage.removeItem('roost_token');
   if (state.ws) state.ws.close();
   location.reload();
 }
@@ -247,7 +247,7 @@ function selectServer(serverId) {
 // Reset chat area to the welcome state (no channel selected).
 function resetChat() {
   $('messages').innerHTML =
-    '<div class="empty-hint"><h2>Добро пожаловать в Felar</h2>' +
+    '<div class="empty-hint"><h2>Добро пожаловать в Roost</h2>' +
     '<p>Выберите канал слева, чтобы начать общение.</p></div>';
   $('channel-name').textContent = '—';
   $('composer-input').disabled = true;
@@ -540,7 +540,7 @@ $('nav-home').addEventListener('click', () => {
       state.user = user;
       await startApp();
     } catch {
-      localStorage.removeItem('felar_token');
+      localStorage.removeItem('roost_token');
       state.token = null;
     }
   }

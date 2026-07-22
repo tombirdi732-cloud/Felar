@@ -1,6 +1,6 @@
-// Felar desktop shell (Electron).
+// Roost desktop shell (Electron).
 // Wraps the shared web client in public/ into a native desktop window.
-// The client connects to a Felar backend by the address entered on the
+// The client connects to a Roost backend by the address entered on the
 // login screen ("Настройки сервера"), stored locally between launches.
 
 const { app, BrowserWindow, shell } = require('electron');
@@ -13,7 +13,7 @@ function createWindow() {
     minWidth: 940,
     minHeight: 560,
     backgroundColor: '#313338',
-    title: 'Felar',
+    title: 'Roost',
     icon: path.join(__dirname, '..', 'public', 'assets', 'icons', 'app-icon.png'),
     autoHideMenuBar: true,
     webPreferences: {

@@ -1,7 +1,7 @@
 node_modules/
-felar.db
-felar.db-shm
-felar.db-wal
+roost.db
+roost.db-shm
+roost.db-wal
 *.log
 .env
 .DS_Store

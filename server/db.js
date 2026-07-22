@@ -1,9 +1,17 @@
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, isAbsolute } from 'path';
+import { mkdirSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const db = new Database(join(__dirname, '..', 'felar.db'));
+
+// DB location is configurable so it can live on a mounted volume in Docker.
+// ROOST_DB may be absolute or relative to the project root.
+const rawPath = process.env.ROOST_DB || 'roost.db';
+const dbPath = isAbsolute(rawPath) ? rawPath : join(__dirname, '..', rawPath);
+mkdirSync(dirname(dbPath), { recursive: true });
+
+const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');

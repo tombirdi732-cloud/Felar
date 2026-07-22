@@ -1,7 +1,7 @@
 {
-  "name": "felar",
+  "name": "roost",
   "version": "1.0.0",
-  "description": "Felar — a Discord-like real-time messenger (web, desktop & mobile)",
+  "description": "Roost — a Discord-like real-time messenger (web, desktop & mobile)",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
@@ -40,8 +40,8 @@
     "@capacitor/ios": "^6.1.0"
   },
   "build": {
-    "appId": "com.felar.app",
-    "productName": "Felar",
+    "appId": "com.roost.app",
+    "productName": "Roost",
     "files": [
       "desktop/**/*",
       "public/**/*",

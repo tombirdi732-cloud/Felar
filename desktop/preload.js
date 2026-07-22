@@ -2,7 +2,7 @@
 // Exposes a minimal, safe bridge; extend as needed (notifications, etc.).
 const { contextBridge } = require('electron');
 
-contextBridge.exposeInMainWorld('felarDesktop', {
+contextBridge.exposeInMainWorld('roostDesktop', {
   platform: process.platform,
   isDesktop: true,
 });

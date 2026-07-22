@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+roost.db
+roost.db-shm
+roost.db-wal
+*.log
+.git
+.gitignore
+dist-desktop
+desktop
+android
+ios
+.env
+Dockerfile
+docker-compose.yml
+deploy
+**/*.md
