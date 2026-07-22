@@ -1,0 +1,25 @@
+{
+  "name": "felar",
+  "version": "1.0.0",
+  "description": "Felar — a Discord-like real-time messenger",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "keywords": [
+    "messenger",
+    "chat",
+    "websocket",
+    "discord"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.21.0",
+    "jsonwebtoken": "^9.0.2",
+    "ws": "^8.18.0"
+  }
+}

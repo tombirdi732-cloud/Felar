@@ -1,0 +1,7 @@
+node_modules/
+felar.db
+felar.db-shm
+felar.db-wal
+*.log
+.env
+.DS_Store

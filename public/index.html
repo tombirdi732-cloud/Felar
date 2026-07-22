@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Felar</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+</head>
+<body>
+  <!-- ===================== Auth screen ===================== -->
+  <div id="auth" class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">Felar</div>
+      <p class="auth-sub" id="auth-sub">С возвращением! Мы рады видеть тебя снова.</p>
+
+      <form id="auth-form" autocomplete="off">
+        <label class="field-label">Имя пользователя</label>
+        <input id="auth-username" class="field-input" type="text" maxlength="24" required />
+
+        <label class="field-label">Пароль</label>
+        <input id="auth-password" class="field-input" type="password" minlength="6" required />
+
+        <div id="auth-error" class="auth-error"></div>
+
+        <button type="submit" id="auth-submit" class="btn-primary">Войти</button>
+      </form>
+
+      <p class="auth-switch">
+        <span id="auth-switch-text">Нужен аккаунт?</span>
+        <a href="#" id="auth-switch-link">Зарегистрироваться</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- ===================== Main app ===================== -->
+  <div id="app" class="app hidden">
+    <!-- Server rail -->
+    <nav class="rail" id="rail">
+      <div class="rail-item home active" id="rail-home" title="Личное пространство">
+        <span>F</span>
+      </div>
+      <div class="rail-sep"></div>
+      <div id="server-list"></div>
+      <div class="rail-item add" id="rail-add" title="Добавить сервер">+</div>
+    </nav>
+
+    <!-- Channels sidebar -->
+    <aside class="sidebar">
+      <header class="sidebar-header" id="server-header">
+        <span id="server-name">Выберите сервер</span>
+        <span class="chevron">⌄</span>
+      </header>
+      <div class="channel-list" id="channel-list"></div>
+      <footer class="user-bar">
+        <div class="avatar" id="me-avatar"></div>
+        <div class="user-bar-info">
+          <div class="user-bar-name" id="me-name">—</div>
+          <div class="user-bar-status">В сети</div>
+        </div>
+        <button class="icon-btn" id="logout-btn" title="Выйти">⏻</button>
+      </footer>
+    </aside>
+
+    <!-- Chat area -->
+    <main class="chat">
+      <header class="chat-header">
+        <span class="chat-hash">#</span>
+        <span id="channel-name">—</span>
+        <div class="chat-header-spacer"></div>
+        <button class="icon-btn" id="toggle-members" title="Участники">👥</button>
+      </header>
+
+      <div class="messages" id="messages">
+        <div class="empty-hint" id="empty-hint">
+          <h2>Добро пожаловать в Felar</h2>
+          <p>Создайте сервер или войдите по приглашению, чтобы начать общение.</p>
+        </div>
+      </div>
+
+      <div class="typing-indicator" id="typing-indicator"></div>
+
+      <div class="composer">
+        <input
+          id="composer-input"
+          class="composer-input"
+          type="text"
+          maxlength="2000"
+          placeholder="Написать сообщение…"
+          disabled
+        />
+      </div>
+    </main>
+
+    <!-- Members sidebar -->
+    <aside class="members" id="members">
+      <div class="members-section" id="members-list"></div>
+    </aside>
+  </div>
+
+  <!-- ===================== Modal ===================== -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <button class="modal-close" id="modal-close">✕</button>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="create">Создать сервер</button>
+        <button class="modal-tab" data-tab="join">Войти по коду</button>
+      </div>
+
+      <div class="modal-body" data-panel="create">
+        <label class="field-label">Название сервера</label>
+        <input id="new-server-name" class="field-input" type="text" maxlength="40" placeholder="Мой сервер" />
+        <button class="btn-primary" id="create-server-btn">Создать</button>
+      </div>
+
+      <div class="modal-body hidden" data-panel="join">
+        <label class="field-label">Код приглашения</label>
+        <input id="join-code" class="field-input" type="text" placeholder="напр. a1b2c3d4" />
+        <button class="btn-primary" id="join-server-btn">Присоединиться</button>
+      </div>
+
+      <div class="modal-error" id="modal-error"></div>
+    </div>
+  </div>
+
+  <!-- New-channel modal -->
+  <div id="channel-modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <button class="modal-close" id="channel-modal-close">✕</button>
+      <h3 class="modal-title">Создать канал</h3>
+      <label class="field-label">Название канала</label>
+      <input id="new-channel-name" class="field-input" type="text" maxlength="24" placeholder="новости" />
+      <button class="btn-primary" id="create-channel-btn">Создать</button>
+      <div class="modal-error" id="channel-modal-error"></div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
