@@ -11,84 +11,106 @@ const state = {
   members: [],
   ws: null,
   typingTimers: {},
+  view: 'chat',
+  channelFilter: '',
 };
 
 /* ----------------------- helpers ----------------------- */
 const $ = (id) => document.getElementById(id);
-const el = (tag, cls, text) => {
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
   if (text != null) n.textContent = text;
   return n;
-};
+}
+function icon(name, cls = 'ic') {
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('class', cls);
+  const use = document.createElementNS(SVGNS, 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.appendChild(use);
+  return svg;
+}
 
-/* --------------------- server address ---------------------
-   In the browser the client talks to the same origin that served it.
-   In the desktop (Electron) and mobile (Capacitor) apps the page is
-   loaded from a local file, so the backend address must be configured
-   explicitly and is stored in localStorage. */
+const PALETTE = ['#6366f1', '#2dd4bf', '#e8a23a', '#f472b6', '#34d399', '#38bdf8', '#a78bfa', '#fb7185'];
+function colorFor(name) {
+  let h = 0;
+  for (const c of String(name || '?')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+function initials(name) {
+  const parts = String(name || '?').trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]);
+  return String(name || '?').trim().slice(0, 2);
+}
+function avatarEl(name, { size = 'md', status } = {}) {
+  const wrap = el('div', 'avatar ' + size);
+  const c = el('div', 'avatar-circle', initials(name));
+  c.style.backgroundColor = colorFor(name);
+  wrap.appendChild(c);
+  if (status) {
+    const d = el('span', 'dot ' + status);
+    wrap.appendChild(d);
+  }
+  return wrap;
+}
+
+/* --------------------- server address --------------------- */
 function getServerBase() {
   const saved = (localStorage.getItem('roost_server') || '').trim();
   if (saved) return saved.replace(/\/+$/, '');
-  // Web build: default to same origin.
-  if (location.protocol === 'http:' || location.protocol === 'https:') return '';
   return '';
 }
-
 function wsBase() {
   const base = getServerBase();
   if (base) return base.replace(/^http/, 'ws');
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${location.host}`;
 }
-
 async function api(path, { method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (state.token) headers.Authorization = `Bearer ${state.token}`;
   const res = await fetch(`${getServerBase()}/api${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
+    method, headers, body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Ошибка запроса');
   return data;
 }
 
-function initials(name) {
-  return (name || '?').trim().slice(0, 2);
-}
-
 function formatTime(ts) {
   const d = new Date(ts);
-  const today = new Date();
-  const sameDay = d.toDateString() === today.toDateString();
   const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  if (sameDay) return `Сегодня, ${time}`;
-  return `${d.toLocaleDateString('ru-RU')} ${time}`;
+  const today = new Date().toDateString() === d.toDateString();
+  return today ? `сегодня в ${time}` : `${d.toLocaleDateString('ru-RU')} в ${time}`;
 }
+
+/* --------------------- accent color --------------------- */
+function applyAccent(hex) {
+  if (!hex) return;
+  document.documentElement.style.setProperty('--primary', hex);
+}
+applyAccent(localStorage.getItem('roost_accent'));
 
 /* ======================= AUTH ======================= */
 let authMode = 'login';
-
 function renderAuthMode() {
   const isLogin = authMode === 'login';
   $('auth-sub').textContent = isLogin
-    ? 'С возвращением! Мы рады видеть тебя снова.'
+    ? 'С возвращением. Рады видеть тебя снова.'
     : 'Создай аккаунт, чтобы присоединиться к Roost.';
   $('auth-submit').textContent = isLogin ? 'Войти' : 'Зарегистрироваться';
   $('auth-switch-text').textContent = isLogin ? 'Нужен аккаунт?' : 'Уже есть аккаунт?';
   $('auth-switch-link').textContent = isLogin ? 'Зарегистрироваться' : 'Войти';
   $('auth-error').textContent = '';
 }
-
 $('auth-switch-link').addEventListener('click', (e) => {
   e.preventDefault();
   authMode = authMode === 'login' ? 'register' : 'login';
   renderAuthMode();
 });
-
-// Server-address settings: shown on demand, prefilled from storage.
 $('server-toggle').addEventListener('click', (e) => {
   e.preventDefault();
   const f = $('server-field');
@@ -96,11 +118,9 @@ $('server-toggle').addEventListener('click', (e) => {
   if (!f.classList.contains('hidden')) $('auth-server').focus();
 });
 $('auth-server').value = localStorage.getItem('roost_server') || '';
-// In packaged apps (no http origin) the server field is required — reveal it.
 if (location.protocol !== 'http:' && location.protocol !== 'https:') {
   $('server-field').classList.remove('hidden');
 }
-
 $('auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = $('auth-username').value.trim();
@@ -109,10 +129,7 @@ $('auth-form').addEventListener('submit', async (e) => {
   if (serverAddr) localStorage.setItem('roost_server', serverAddr);
   else localStorage.removeItem('roost_server');
   try {
-    const data = await api(`/auth/${authMode}`, {
-      method: 'POST',
-      body: { username, password },
-    });
+    const data = await api(`/auth/${authMode}`, { method: 'POST', body: { username, password } });
     state.token = data.token;
     state.user = data.user;
     localStorage.setItem('roost_token', data.token);
@@ -121,13 +138,13 @@ $('auth-form').addEventListener('submit', async (e) => {
     $('auth-error').textContent = err.message;
   }
 });
-
 function logout() {
   localStorage.removeItem('roost_token');
   if (state.ws) state.ws.close();
   location.reload();
 }
 $('logout-btn').addEventListener('click', logout);
+$('settings-logout').addEventListener('click', logout);
 
 /* ======================= APP BOOT ======================= */
 async function startApp() {
@@ -135,7 +152,11 @@ async function startApp() {
   $('app').classList.remove('hidden');
 
   $('me-name').textContent = state.user.username;
-  $('me-avatar').textContent = initials(state.user.username);
+  const meAv = avatarEl(state.user.username, { size: 'sm', status: 'online' });
+  meAv.id = 'me-avatar';
+  $('me-avatar').replaceWith(meAv);
+  $('nav-profile').innerHTML = '';
+  $('nav-profile').appendChild(avatarEl(state.user.username, { size: 'sm', status: 'online' }));
 
   await loadServers();
   connectWebSocket();
@@ -144,134 +165,118 @@ async function startApp() {
 async function loadServers() {
   const { servers } = await api('/servers');
   state.servers = servers;
-  renderTree();
-
-  if (servers.length && !state.currentServerId) {
-    selectServer(servers[0].id);
-  }
+  renderRail();
+  if (servers.length && !state.currentServerId) selectServer(servers[0].id);
+  else if (!servers.length) { $('server-name').textContent = 'Нет серверов'; renderTree(); }
 }
 
-/* ------------- navigation tree (servers → channels) ------------- */
-function renderTree() {
-  const tree = $('nav-tree');
-  tree.innerHTML = '';
-
-  if (!state.servers.length) {
-    const empty = el('div', 'tree-empty');
-    empty.style.cssText = 'padding:20px 12px;color:var(--text-muted);font-size:13px;line-height:1.5';
-    empty.textContent = 'Пока нет серверов. Создай первый кнопкой ниже или войди по коду приглашения.';
-    tree.appendChild(empty);
-    return;
-  }
-
+/* ------------------- rail (servers) ------------------- */
+function renderRail() {
+  const list = $('server-list');
+  list.innerHTML = '';
   for (const s of state.servers) {
-    const isActive = s.id === state.currentServerId;
-    const block = el('div', 'tree-server' + (isActive ? ' expanded active-server' : ''));
-
-    const head = el('div', 'tree-server-head');
-    head.appendChild(el('span', 'tree-caret', '▸'));
-    head.appendChild(el('div', 'server-avatar', initials(s.name)));
-    head.appendChild(el('span', 'tree-server-name', s.name));
-    if (s.owner_id === state.user.id) {
-      const add = el('span', 'tree-add-channel', '+');
-      add.title = 'Создать канал';
-      add.addEventListener('click', (e) => {
-        e.stopPropagation();
-        state.currentServerId = s.id;
-        openChannelModal();
-      });
-      head.appendChild(add);
-    }
-    head.addEventListener('click', () => toggleServer(s.id));
-    block.appendChild(head);
-
-    if (isActive) {
-      const chans = el('div', 'tree-channels');
-      for (const ch of s.channels) {
-        const item = el('div', 'channel' + (ch.id === state.currentChannelId ? ' active' : ''));
-        item.appendChild(el('span', 'hash', '#'));
-        item.appendChild(el('span', null, ch.name));
-        item.addEventListener('click', () => selectChannel(ch.id));
-        chans.appendChild(item);
-      }
-
-      const inv = el('div', 'tree-invite');
-      inv.appendChild(el('span', null, 'Инвайт:'));
-      inv.appendChild(el('span', 'code', s.invite_code));
-      const copy = el('span', 'copy', '⧉');
-      copy.title = 'Скопировать код';
-      copy.addEventListener('click', (e) => {
-        e.stopPropagation();
-        navigator.clipboard?.writeText(s.invite_code);
-        copy.textContent = '✓';
-        setTimeout(() => (copy.textContent = '⧉'), 1200);
-      });
-      inv.appendChild(copy);
-      chans.appendChild(inv);
-
-      block.appendChild(chans);
-    }
-
-    tree.appendChild(block);
+    const item = el('button', 'rail-item', initials(s.name));
+    item.title = s.name;
+    if (s.id === state.currentServerId && state.view === 'chat') item.classList.add('active');
+    item.addEventListener('click', () => { showView('chat'); selectServer(s.id); });
+    list.appendChild(item);
   }
-}
-
-// Collapse if the clicked server is already open, otherwise open it.
-function toggleServer(serverId) {
-  if (state.currentServerId === serverId) {
-    state.currentServerId = null;
-    state.currentChannelId = null;
-    renderTree();
-    resetChat();
-    return;
-  }
-  selectServer(serverId);
 }
 
 function selectServer(serverId) {
   state.currentServerId = serverId;
   const server = state.servers.find((s) => s.id === serverId);
   if (!server) return;
-
+  renderRail();
+  $('server-name').textContent = server.name;
   renderTree();
   loadMembers(serverId);
+  if (server.channels.length) selectChannel(server.channels[0].id);
+  else { state.currentChannelId = null; resetChat(); }
+}
 
-  if (server.channels.length) {
-    selectChannel(server.channels[0].id);
-  } else {
-    state.currentChannelId = null;
-    resetChat();
+/* ------------------- channel tree ------------------- */
+function renderTree() {
+  const tree = $('tree');
+  tree.innerHTML = '';
+  const server = state.servers.find((s) => s.id === state.currentServerId);
+  if (!server) {
+    tree.appendChild(el('div', 'tree-empty', 'Нет серверов. Создай первый кнопкой + слева или войди по коду приглашения.'));
+    return;
   }
+
+  const cat = el('div', 'cat');
+  const head = el('div', 'cat-head');
+  const chev = icon('chevron-down', 'ic'); chev.style.width = '12px'; chev.style.height = '12px';
+  head.appendChild(chev);
+  head.appendChild(el('span', 'cat-name', 'Каналы'));
+  if (server.owner_id === state.user.id) {
+    const add = el('span', 'cat-add');
+    add.appendChild(icon('plus', 'ic ic-sm'));
+    add.title = 'Создать канал';
+    add.addEventListener('click', (e) => { e.stopPropagation(); openChannelModal(); });
+    head.appendChild(add);
+  }
+  cat.appendChild(head);
+
+  const chans = el('div', 'cat-channels');
+  const filter = state.channelFilter.toLowerCase();
+  const visible = server.channels.filter((c) => !filter || c.name.toLowerCase().includes(filter));
+  for (const ch of visible) {
+    const item = el('button', 'channel' + (ch.id === state.currentChannelId ? ' active' : ''));
+    item.appendChild(icon('hash', 'ic ic-sm'));
+    item.appendChild(el('span', 'ch-name', ch.name));
+    item.addEventListener('click', () => { showView('chat'); selectChannel(ch.id); });
+    chans.appendChild(item);
+  }
+  cat.appendChild(chans);
+  tree.appendChild(cat);
+
+  // invite code card
+  const inv = el('div', 'invite-row');
+  inv.appendChild(el('span', null, 'Инвайт:'));
+  inv.appendChild(el('span', 'code', server.invite_code));
+  const copy = el('button', 'copy');
+  copy.appendChild(icon('copy', 'ic ic-sm'));
+  copy.title = 'Скопировать код';
+  copy.addEventListener('click', () => {
+    navigator.clipboard?.writeText(server.invite_code);
+    copy.innerHTML = ''; copy.textContent = '✓';
+    setTimeout(() => { copy.innerHTML = ''; copy.appendChild(icon('copy', 'ic ic-sm')); }, 1200);
+  });
+  inv.appendChild(copy);
+  tree.appendChild(inv);
 }
 
-// Reset chat area to the welcome state (no channel selected).
-function resetChat() {
-  $('messages').innerHTML =
-    '<div class="empty-hint"><h2>Добро пожаловать в Roost</h2>' +
-    '<p>Выберите канал слева, чтобы начать общение.</p></div>';
-  $('channel-name').textContent = '—';
-  $('composer-input').disabled = true;
-  $('members-list').innerHTML = '';
-}
+$('channel-search').addEventListener('input', (e) => {
+  state.channelFilter = e.target.value;
+  renderTree();
+});
 
-/* ------------------- channels ------------------- */
+/* ------------------- channels & messages ------------------- */
 async function selectChannel(channelId) {
   state.currentChannelId = channelId;
   const server = state.servers.find((s) => s.id === state.currentServerId);
   const channel = server?.channels.find((c) => c.id === channelId);
   if (!channel) return;
-
   renderTree();
   $('channel-name').textContent = channel.name;
+  $('channel-topic').textContent = `Канал #${channel.name}`;
   $('composer-input').disabled = false;
   $('composer-input').placeholder = `Написать в #${channel.name}`;
-
   await loadMessages(channelId);
 }
 
-/* ------------------- messages ------------------- */
-let lastMsg = null;
+function resetChat() {
+  $('messages').innerHTML =
+    '<div class="empty-hint"><h2>Добро пожаловать в Roost</h2><p>Выберите канал слева, чтобы начать общение.</p></div>';
+  $('channel-name').textContent = '—';
+  $('channel-topic').textContent = '';
+  $('composer-input').disabled = true;
+  $('members-list').innerHTML = '';
+}
 
+let lastMsg = null;
 async function loadMessages(channelId) {
   const box = $('messages');
   box.innerHTML = '';
@@ -284,6 +289,11 @@ async function loadMessages(channelId) {
     box.appendChild(hint);
     return;
   }
+  const divider = el('div', 'date-divider');
+  divider.appendChild(el('div', 'line'));
+  divider.appendChild(el('span', null, 'Начало канала'));
+  divider.appendChild(el('div', 'line'));
+  box.appendChild(divider);
   for (const m of messages) appendMessage(m, false);
   scrollToBottom();
 }
@@ -294,50 +304,38 @@ function appendMessage(m, animate = true) {
   const hint = box.querySelector('.empty-hint');
   if (hint) hint.remove();
 
-  const grouped =
-    lastMsg &&
-    lastMsg.user_id === m.user_id &&
-    m.created_at - lastMsg.created_at < 5 * 60 * 1000;
+  const grouped = lastMsg && lastMsg.user_id === m.user_id && m.created_at - lastMsg.created_at < 5 * 60 * 1000;
+  const row = el('div', 'msg' + (grouped ? ' grouped' : ''));
+  row.appendChild(avatarEl(m.username, { size: 'md' }));
 
-  const row = el('div', 'message' + (grouped ? ' grouped' : ''));
-
-  const avatar = el('div', 'avatar', initials(m.username));
-  row.appendChild(avatar);
-
-  const body = el('div', 'message-body');
-  const head = el('div', 'message-head');
-  head.appendChild(el('span', 'message-author', m.username));
-  head.appendChild(el('span', 'message-time', formatTime(m.created_at)));
+  const body = el('div', 'body');
+  const head = el('div', 'head');
+  head.appendChild(el('span', 'author', m.username));
+  head.appendChild(el('span', 'time', formatTime(m.created_at)));
   body.appendChild(head);
-  body.appendChild(el('div', 'message-text', m.content));
+  body.appendChild(el('div', 'text', m.content));
   row.appendChild(body);
 
   box.appendChild(row);
   lastMsg = m;
 
-  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 150;
-  if (animate && nearBottom) scrollToBottom();
-  else if (!animate) scrollToBottom();
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 200;
+  if (!animate || nearBottom) scrollToBottom();
 }
+function scrollToBottom() { const b = $('messages'); b.scrollTop = b.scrollHeight; }
 
-function scrollToBottom() {
-  const box = $('messages');
-  box.scrollTop = box.scrollHeight;
+function sendCurrent() {
+  const input = $('composer-input');
+  const content = input.value.trim();
+  if (!content || !state.currentChannelId) return;
+  sendWs({ type: 'message', channel_id: state.currentChannelId, content });
+  input.value = '';
 }
-
-/* composer */
 $('composer-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    const input = e.target;
-    const content = input.value.trim();
-    if (!content || !state.currentChannelId) return;
-    sendWs({ type: 'message', channel_id: state.currentChannelId, content });
-    input.value = '';
-  } else {
-    sendWs({ type: 'typing', channel_id: state.currentChannelId });
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCurrent(); }
+  else sendWs({ type: 'typing', channel_id: state.currentChannelId });
 });
+$('send-btn').addEventListener('click', sendCurrent);
 
 /* ------------------- members ------------------- */
 async function loadMembers(serverId) {
@@ -347,84 +345,168 @@ async function loadMembers(serverId) {
     renderMembers();
   } catch { /* ignore */ }
 }
-
 function renderMembers() {
   const box = $('members-list');
   box.innerHTML = '';
+  const server = state.servers.find((s) => s.id === state.currentServerId);
+  const roleOf = (m) => (server && m.id === server.owner_id ? 'Владелец' : 'Участник');
   const online = state.members.filter((m) => m.online);
   const offline = state.members.filter((m) => !m.online);
 
-  const section = (title, list) => {
+  const section = (title, list, isOnline) => {
     if (!list.length) return;
     box.appendChild(el('div', 'members-heading', `${title} — ${list.length}`));
     for (const m of list) {
-      const row = el('div', 'member' + (m.online ? '' : ' offline'));
-      const av = el('div', 'avatar', initials(m.username));
-      av.appendChild(el('span', 'status-dot'));
-      row.appendChild(av);
-      row.appendChild(el('span', 'member-name', m.username));
+      const row = el('div', 'member' + (isOnline ? '' : ' offline'));
+      row.appendChild(avatarEl(m.username, { size: 'sm', status: isOnline ? 'online' : 'offline' }));
+      const info = el('div');
+      info.style.minWidth = '0';
+      info.appendChild(el('div', 'm-name', m.username));
+      info.appendChild(el('div', 'm-role', roleOf(m)));
+      row.appendChild(info);
       box.appendChild(row);
     }
   };
-  section('В сети', online);
-  section('Не в сети', offline);
+  section('В сети', online, true);
+  section('Не в сети', offline, false);
 }
-
 function setPresence(userId, isOnline) {
   const m = state.members.find((x) => x.id === userId);
-  if (m) {
-    m.online = isOnline;
-    renderMembers();
-  }
+  if (m) { m.online = isOnline; renderMembers(); }
+}
+$('toggle-members').addEventListener('click', () => {
+  const btn = $('toggle-members');
+  $('members').classList.toggle('hidden');
+  btn.classList.toggle('active', !$('members').classList.contains('hidden'));
+});
+
+/* ======================= views ======================= */
+function showView(v) {
+  state.view = v;
+  $('chat-view').classList.toggle('hidden', v !== 'chat');
+  $('profile-view').classList.toggle('hidden', v !== 'profile');
+  $('settings-view').classList.toggle('hidden', v !== 'settings');
+  $('sidebar').classList.toggle('hidden', v !== 'chat');
+  $('nav-settings').classList.toggle('active', v === 'settings');
+  renderRail();
+  if (v === 'profile') renderProfile();
+  if (v === 'settings') renderSettings();
+}
+$('nav-settings').addEventListener('click', () => showView('settings'));
+$('nav-profile').addEventListener('click', () => showView('profile'));
+document.querySelectorAll('[data-goto]').forEach((b) =>
+  b.addEventListener('click', () => showView(b.dataset.goto)));
+
+function renderProfile() {
+  $('profile-name').textContent = state.user.username;
+  $('profile-handle').textContent = state.user.username.toLowerCase().replace(/\s+/g, '.');
+  $('stat-servers').textContent = state.servers.length;
+  const av = avatarEl(state.user.username, { size: 'xl', status: 'online' });
+  av.id = 'profile-avatar';
+  $('profile-avatar').replaceWith(av);
 }
 
-$('toggle-members').addEventListener('click', () => {
-  $('members').classList.toggle('hidden');
-});
+/* ------- settings ------- */
+let settingsSection = 'account';
+const localToggles = JSON.parse(localStorage.getItem('roost_toggles') || '{"sound":true,"desktop":true,"mentions":true,"dnd":false,"compact":false}');
+function saveToggles() { localStorage.setItem('roost_toggles', JSON.stringify(localToggles)); }
+
+document.querySelectorAll('.s-item[data-section]').forEach((b) =>
+  b.addEventListener('click', () => {
+    settingsSection = b.dataset.section;
+    document.querySelectorAll('.s-item[data-section]').forEach((x) => x.classList.toggle('active', x === b));
+    renderSettings();
+  }));
+
+function toggleRow(key, title, desc) {
+  const row = el('div', 'setting-row');
+  const left = el('div');
+  left.appendChild(el('div', 's-title', title));
+  left.appendChild(el('div', 's-desc', desc));
+  row.appendChild(left);
+  const t = el('button', 'toggle' + (localToggles[key] ? ' on' : ''));
+  t.appendChild(el('span', 'knob'));
+  t.addEventListener('click', () => { localToggles[key] = !localToggles[key]; saveToggles(); t.classList.toggle('on'); });
+  row.appendChild(t);
+  return row;
+}
+
+function renderSettings() {
+  const c = $('settings-content');
+  c.innerHTML = '';
+  const block = el('div', 'settings-block');
+
+  if (settingsSection === 'account') {
+    c.appendChild(el('h2', null, 'Аккаунт'));
+    const card = el('div', 'card');
+    card.style.display = 'flex'; card.style.alignItems = 'center'; card.style.gap = '16px';
+    card.appendChild(avatarEl(state.user.username, { size: 'lg', status: 'online' }));
+    const info = el('div');
+    info.appendChild(el('div', 's-title', state.user.username));
+    info.appendChild(el('div', 's-desc', '@' + state.user.username.toLowerCase().replace(/\s+/g, '.')));
+    card.appendChild(info);
+    block.appendChild(card);
+    const note = el('p', 's-desc');
+    note.style.marginTop = '16px';
+    note.textContent = 'Почта, телефон и смена пароля появятся, когда расширим профиль на сервере.';
+    block.appendChild(note);
+  } else if (settingsSection === 'appearance') {
+    c.appendChild(el('h2', null, 'Внешний вид'));
+    block.appendChild(el('div', 'field-label', 'Акцентный цвет'));
+    const row = el('div', 'swatch-row');
+    const current = localStorage.getItem('roost_accent') || '#e8a23a';
+    ['#e8a23a', '#6366f1', '#2dd4bf', '#e53e3e', '#f472b6', '#34d399'].forEach((hex) => {
+      const sw = el('button', 'swatch' + (hex === current ? ' active' : ''));
+      sw.style.backgroundColor = hex;
+      sw.addEventListener('click', () => {
+        localStorage.setItem('roost_accent', hex);
+        applyAccent(hex);
+        renderSettings();
+      });
+      row.appendChild(sw);
+    });
+    block.appendChild(row);
+    block.appendChild(toggleRow('compact', 'Компактный режим', 'Уменьшить расстояние между сообщениями'));
+  } else if (settingsSection === 'notifications') {
+    c.appendChild(el('h2', null, 'Уведомления'));
+    block.appendChild(toggleRow('sound', 'Звук уведомлений', 'Проигрывать звук при новых сообщениях'));
+    block.appendChild(toggleRow('desktop', 'Системные уведомления', 'Показывать уведомления рабочего стола'));
+    block.appendChild(toggleRow('mentions', 'Упоминания', 'Уведомлять при @упоминании'));
+    block.appendChild(toggleRow('dnd', 'Не беспокоить', 'Временно отключить все уведомления'));
+  } else if (settingsSection === 'privacy') {
+    c.appendChild(el('h2', null, 'Приватность'));
+    const info = el('div', 'setting-row');
+    const l = el('div');
+    l.appendChild(el('div', 's-title', 'Аккаунт защищён'));
+    l.appendChild(el('div', 's-desc', 'Пароли хранятся в зашифрованном виде (bcrypt). Двухфакторную аутентификацию добавим позже.'));
+    info.appendChild(l);
+    block.appendChild(info);
+  }
+  c.appendChild(block);
+}
 
 /* ======================= WebSocket ======================= */
 function connectWebSocket() {
   const ws = new WebSocket(`${wsBase()}/ws?token=${state.token}`);
   state.ws = ws;
-
   ws.addEventListener('message', (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
     handleWsEvent(msg);
   });
-
-  ws.addEventListener('close', () => {
-    // Attempt reconnect after a short delay.
-    setTimeout(() => { if (state.token) connectWebSocket(); }, 2000);
-  });
+  ws.addEventListener('close', () => { setTimeout(() => { if (state.token) connectWebSocket(); }, 2000); });
 }
-
 function sendWs(payload) {
-  if (state.ws && state.ws.readyState === 1) {
-    state.ws.send(JSON.stringify(payload));
-  }
+  if (state.ws && state.ws.readyState === 1) state.ws.send(JSON.stringify(payload));
 }
-
 function handleWsEvent(msg) {
   switch (msg.type) {
-    case 'message':
-      appendMessage(msg.message);
-      break;
-    case 'presence':
-      setPresence(msg.user.id, msg.online);
-      break;
-    case 'member_joined':
-      if (msg.server_id === state.currentServerId) loadMembers(msg.server_id);
-      break;
-    case 'channel_created':
-      handleChannelCreated(msg);
-      break;
-    case 'typing':
-      showTyping(msg);
-      break;
+    case 'message': appendMessage(msg.message); break;
+    case 'presence': setPresence(msg.user.id, msg.online); break;
+    case 'member_joined': if (msg.server_id === state.currentServerId) loadMembers(msg.server_id); break;
+    case 'channel_created': handleChannelCreated(msg); break;
+    case 'typing': showTyping(msg); break;
   }
 }
-
 function handleChannelCreated(msg) {
   const server = state.servers.find((s) => s.id === msg.server_id);
   if (!server) return;
@@ -433,37 +515,26 @@ function handleChannelCreated(msg) {
     if (msg.server_id === state.currentServerId) renderTree();
   }
 }
-
-/* typing indicator */
 function showTyping(msg) {
   if (msg.channel_id !== state.currentChannelId) return;
   const key = msg.user.id;
-  $('typing-indicator').textContent = `${msg.user.username} печатает…`;
+  $('typing').textContent = `${msg.user.username} печатает…`;
   clearTimeout(state.typingTimers[key]);
-  state.typingTimers[key] = setTimeout(() => {
-    $('typing-indicator').textContent = '';
-  }, 2500);
+  state.typingTimers[key] = setTimeout(() => { $('typing').textContent = ''; }, 2500);
 }
 
 /* ======================= Modals ======================= */
-$('add-server-btn').addEventListener('click', () => $('modal-overlay').classList.remove('hidden'));
+$('rail-add').addEventListener('click', () => $('modal-overlay').classList.remove('hidden'));
 $('modal-close').addEventListener('click', () => $('modal-overlay').classList.add('hidden'));
-$('modal-overlay').addEventListener('click', (e) => {
-  if (e.target === $('modal-overlay')) $('modal-overlay').classList.add('hidden');
-});
-
+$('modal-overlay').addEventListener('click', (e) => { if (e.target === $('modal-overlay')) $('modal-overlay').classList.add('hidden'); });
 document.querySelectorAll('.modal-tab').forEach((tab) => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.modal-tab').forEach((t) => t.classList.remove('active'));
     tab.classList.add('active');
-    const target = tab.dataset.tab;
-    document.querySelectorAll('.modal-body').forEach((p) => {
-      p.classList.toggle('hidden', p.dataset.panel !== target);
-    });
+    document.querySelectorAll('.modal-body').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab.dataset.tab));
     $('modal-error').textContent = '';
   });
 });
-
 $('create-server-btn').addEventListener('click', async () => {
   const name = $('new-server-name').value.trim();
   try {
@@ -471,13 +542,10 @@ $('create-server-btn').addEventListener('click', async () => {
     state.servers.push(server);
     $('new-server-name').value = '';
     $('modal-overlay').classList.add('hidden');
-    renderTree();
+    showView('chat');
     selectServer(server.id);
-  } catch (err) {
-    $('modal-error').textContent = err.message;
-  }
+  } catch (err) { $('modal-error').textContent = err.message; }
 });
-
 $('join-server-btn').addEventListener('click', async () => {
   const invite_code = $('join-code').value.trim();
   try {
@@ -485,50 +553,28 @@ $('join-server-btn').addEventListener('click', async () => {
     if (!state.servers.find((s) => s.id === server.id)) state.servers.push(server);
     $('join-code').value = '';
     $('modal-overlay').classList.add('hidden');
-    renderTree();
+    showView('chat');
     selectServer(server.id);
-  } catch (err) {
-    $('modal-error').textContent = err.message;
-  }
+  } catch (err) { $('modal-error').textContent = err.message; }
 });
 
-/* channel modal */
 function openChannelModal() {
   $('channel-modal-overlay').classList.remove('hidden');
   $('new-channel-name').focus();
 }
-$('channel-modal-close').addEventListener('click', () =>
-  $('channel-modal-overlay').classList.add('hidden')
-);
-$('channel-modal-overlay').addEventListener('click', (e) => {
-  if (e.target === $('channel-modal-overlay')) $('channel-modal-overlay').classList.add('hidden');
-});
+$('channel-modal-close').addEventListener('click', () => $('channel-modal-overlay').classList.add('hidden'));
+$('channel-modal-overlay').addEventListener('click', (e) => { if (e.target === $('channel-modal-overlay')) $('channel-modal-overlay').classList.add('hidden'); });
 $('create-channel-btn').addEventListener('click', async () => {
   const name = $('new-channel-name').value.trim();
   try {
-    const { channel } = await api(`/servers/${state.currentServerId}/channels`, {
-      method: 'POST',
-      body: { name },
-    });
+    const { channel } = await api(`/servers/${state.currentServerId}/channels`, { method: 'POST', body: { name } });
     const server = state.servers.find((s) => s.id === state.currentServerId);
-    if (server && !server.channels.find((c) => c.id === channel.id)) {
-      server.channels.push(channel);
-    }
+    if (server && !server.channels.find((c) => c.id === channel.id)) server.channels.push(channel);
     $('new-channel-name').value = '';
     $('channel-modal-overlay').classList.add('hidden');
     renderTree();
     selectChannel(channel.id);
-  } catch (err) {
-    $('channel-modal-error').textContent = err.message;
-  }
-});
-
-/* brand / home button — collapse everything back to the welcome screen */
-$('nav-home').addEventListener('click', () => {
-  state.currentServerId = null;
-  state.currentChannelId = null;
-  renderTree();
-  resetChat();
+  } catch (err) { $('channel-modal-error').textContent = err.message; }
 });
 
 /* ======================= Bootstrap ======================= */

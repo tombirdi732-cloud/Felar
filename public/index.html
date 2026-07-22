@@ -5,19 +5,50 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Roost</title>
   <link rel="icon" href="/assets/icons/favicon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Inter:wght@300;400;500;600&display=swap" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/css/theme.css" />
 </head>
 <body>
+  <!-- ===================== Icon sprite ===================== -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-hash" viewBox="0 0 24 24"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+      <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+      <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
+      <symbol id="i-headphones" viewBox="0 0 24 24"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5a9 9 0 0 1 18 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></symbol>
+      <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+      <symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r=".8" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r=".8" fill="currentColor" stroke="none"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.65-.75 1.65-1.69 0-.44-.18-.83-.44-1.12-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C22 6 17.5 2 12 2z"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6l1-1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2l1 1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></symbol>
+    </defs>
+  </svg>
+
   <!-- ===================== Auth screen ===================== -->
   <div id="auth" class="auth-screen">
     <div class="auth-card">
       <div class="auth-logo">
         <img src="/assets/icons/logo.png" alt="Roost" class="auth-logo-img"
-             onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
-        <span class="auth-logo-text" style="display:none">Roost</span>
+             onerror="this.outerHTML='<div class=&quot;auth-logo-mark&quot;>R</div>'" />
       </div>
-      <p class="auth-sub" id="auth-sub">С возвращением! Мы рады видеть тебя снова.</p>
+      <div class="auth-title">Roost</div>
+      <p class="auth-sub" id="auth-sub">С возвращением. Рады видеть тебя снова.</p>
 
       <form id="auth-form" autocomplete="off">
         <label class="field-label">Имя пользователя</label>
@@ -32,7 +63,6 @@
         </div>
 
         <div id="auth-error" class="auth-error"></div>
-
         <button type="submit" id="auth-submit" class="btn-primary">Войти</button>
       </form>
 
@@ -40,105 +70,166 @@
         <span id="auth-switch-text">Нужен аккаунт?</span>
         <a href="#" id="auth-switch-link">Зарегистрироваться</a>
       </p>
-      <p class="auth-switch">
-        <a href="#" id="server-toggle">Настройки сервера</a>
-      </p>
+      <p class="auth-switch"><a href="#" id="server-toggle">Настройки сервера</a></p>
     </div>
   </div>
 
   <!-- ===================== Main app ===================== -->
   <div id="app" class="app hidden">
-    <!-- Unified navigation: servers expand into their channels (tree). -->
-    <aside class="nav">
-      <header class="nav-brand" id="nav-home" title="Личное пространство">
-        <img src="/assets/icons/logo.png" alt="Roost" class="nav-brand-img"
-             onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
-        <span class="nav-brand-text" style="display:none">Roost</span>
-      </header>
-
-      <div class="nav-tree" id="nav-tree"></div>
-
-      <div class="nav-actions">
-        <button class="nav-action-btn" id="add-server-btn">
-          <span class="plus">+</span> Добавить сервер
-        </button>
+    <!-- Workspace rail -->
+    <nav class="rail">
+      <div class="rail-logo" id="rail-logo">
+        <img src="/assets/icons/logo.png" alt="" onerror="this.remove()" />
       </div>
+      <div class="rail-sep"></div>
+      <div id="server-list"></div>
+      <button class="rail-item rail-add" id="rail-add" title="Добавить сервер"><svg class="ic"><use href="#i-plus"/></svg></button>
+      <div class="rail-bottom">
+        <button class="rail-icon" id="nav-settings" title="Настройки"><svg class="ic"><use href="#i-settings"/></svg></button>
+        <button class="rail-icon" id="nav-profile" title="Профиль" style="padding:0"></button>
+      </div>
+    </nav>
 
-      <footer class="user-bar">
-        <div class="avatar" id="me-avatar"></div>
-        <div class="user-bar-info">
-          <div class="user-bar-name" id="me-name">—</div>
-          <div class="user-bar-status"><span class="me-dot"></span>В сети</div>
-        </div>
-        <button class="icon-btn" id="logout-btn" title="Выйти">⏻</button>
-      </footer>
-    </aside>
-
-    <!-- Chat area -->
-    <main class="chat">
-      <header class="chat-header">
-        <span class="chat-hash">#</span>
-        <span id="channel-name">—</span>
-        <div class="chat-header-spacer"></div>
-        <button class="icon-btn" id="toggle-members" title="Участники">👥</button>
-      </header>
-
-      <div class="messages" id="messages">
-        <div class="empty-hint" id="empty-hint">
-          <h2>Добро пожаловать в Roost</h2>
-          <p>Создайте сервер или войдите по приглашению, чтобы начать общение.</p>
+    <!-- Channel sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title" id="server-name">Выберите сервер</span>
+        <button class="chev"><svg class="ic ic-sm"><use href="#i-chevron-down"/></svg></button>
+      </div>
+      <div class="tree-search">
+        <div class="tree-search-box">
+          <svg class="ic ic-sm"><use href="#i-search"/></svg>
+          <input id="channel-search" placeholder="Найти канал..." />
         </div>
       </div>
-
-      <div class="typing-indicator" id="typing-indicator"></div>
-
-      <div class="composer">
-        <input
-          id="composer-input"
-          class="composer-input"
-          type="text"
-          maxlength="2000"
-          placeholder="Написать сообщение…"
-          disabled
-        />
+      <div class="tree" id="tree"></div>
+      <div class="user-bar">
+        <div class="avatar sm" id="me-avatar"></div>
+        <div class="info">
+          <div class="u-name" id="me-name">—</div>
+          <div class="u-status">В сети</div>
+        </div>
+        <div class="u-actions">
+          <button class="icon-btn" id="logout-btn" title="Выйти"><svg class="ic ic-sm"><use href="#i-logout"/></svg></button>
+        </div>
       </div>
-    </main>
-
-    <!-- Members sidebar -->
-    <aside class="members" id="members">
-      <div class="members-section" id="members-list"></div>
     </aside>
+
+    <!-- Chat view -->
+    <div class="chat" id="chat-view">
+      <div class="chat-main">
+        <div class="chat-toolbar">
+          <div class="left">
+            <span class="ch-hash"><svg class="ic ic-lg"><use href="#i-hash"/></svg></span>
+            <span class="ch-title" id="channel-name">—</span>
+            <div class="divider"></div>
+            <span class="topic" id="channel-topic"></span>
+          </div>
+          <div class="right">
+            <button class="icon-btn" title="Уведомления"><svg class="ic"><use href="#i-bell"/></svg></button>
+            <button class="icon-btn" title="Закреплённые"><svg class="ic"><use href="#i-pin"/></svg></button>
+            <button class="icon-btn active" id="toggle-members" title="Участники"><svg class="ic"><use href="#i-users"/></svg></button>
+          </div>
+        </div>
+
+        <div class="messages" id="messages">
+          <div class="empty-hint"><h2>Добро пожаловать в Roost</h2><p>Выберите канал слева, чтобы начать общение.</p></div>
+        </div>
+        <div class="typing" id="typing"></div>
+
+        <div class="composer">
+          <div class="composer-box">
+            <button class="plus" title="Загрузить"><svg class="ic ic-lg"><use href="#i-plus"/></svg></button>
+            <input id="composer-input" type="text" maxlength="2000" placeholder="Написать сообщение…" disabled />
+            <div class="tools">
+              <button class="icon-btn" title="Файл" style="padding:2px"><svg class="ic"><use href="#i-paperclip"/></svg></button>
+              <button class="icon-btn" title="Эмодзи" style="padding:2px"><svg class="ic"><use href="#i-smile"/></svg></button>
+              <button class="send" id="send-btn"><svg class="ic"><use href="#i-send"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="members" id="members">
+        <div id="members-list"></div>
+      </aside>
+    </div>
+
+    <!-- Profile view -->
+    <div class="chat hidden" id="profile-view">
+      <div class="chat-main">
+        <div class="view-topbar">
+          <button class="back" data-goto="chat"><svg class="ic ic-sm"><use href="#i-chevron-left"/></svg> Назад</button>
+          <div class="divider"></div>
+          <span class="vt-title">Профиль</span>
+        </div>
+        <div class="view-body scrollbar-hide">
+          <div class="profile-banner"><div class="accent"></div></div>
+          <div class="profile-inner">
+            <div class="profile-avatar-row">
+              <div class="avatar xl" id="profile-avatar"></div>
+            </div>
+            <div class="profile-name">
+              <h2 id="profile-name">—</h2>
+              <span class="badge-online"><span class="d"></span> В сети</span>
+            </div>
+            <p class="profile-handle"><svg class="ic ic-sm"><use href="#i-at"/></svg> <span id="profile-handle">—</span></p>
+
+            <div class="cards-grid">
+              <div class="card">
+                <div class="card-label">О себе</div>
+                <p class="text" style="color:var(--muted)">Расскажи о себе — раздел появится, когда добавим профили полностью.</p>
+              </div>
+              <div class="card">
+                <div class="card-label">Активность</div>
+                <div class="row"><span class="k">Серверов</span><span class="v" id="stat-servers">0</span></div>
+                <div class="row"><span class="k">В сети</span><span class="v">сейчас</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings view -->
+    <div class="settings hidden" id="settings-view">
+      <div class="settings-nav">
+        <div class="s-label">Настройки</div>
+        <button class="s-item active" data-section="account"><svg class="ic ic-sm"><use href="#i-at"/></svg> Аккаунт</button>
+        <button class="s-item" data-section="appearance"><svg class="ic ic-sm"><use href="#i-palette"/></svg> Внешний вид</button>
+        <button class="s-item" data-section="notifications"><svg class="ic ic-sm"><use href="#i-bell"/></svg> Уведомления</button>
+        <button class="s-item" data-section="privacy"><svg class="ic ic-sm"><use href="#i-lock"/></svg> Приватность</button>
+        <button class="s-item s-logout" id="settings-logout"><svg class="ic ic-sm"><use href="#i-logout"/></svg> Выйти</button>
+      </div>
+      <div class="settings-content" id="settings-content"></div>
+    </div>
   </div>
 
-  <!-- ===================== Modal ===================== -->
+  <!-- ===================== Modals ===================== -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal">
-      <button class="modal-close" id="modal-close">✕</button>
+      <button class="modal-close" id="modal-close"><svg class="ic ic-sm"><use href="#i-x"/></svg></button>
       <div class="modal-tabs">
         <button class="modal-tab active" data-tab="create">Создать сервер</button>
         <button class="modal-tab" data-tab="join">Войти по коду</button>
       </div>
-
       <div class="modal-body" data-panel="create">
         <label class="field-label">Название сервера</label>
         <input id="new-server-name" class="field-input" type="text" maxlength="40" placeholder="Мой сервер" />
         <button class="btn-primary" id="create-server-btn">Создать</button>
       </div>
-
       <div class="modal-body hidden" data-panel="join">
         <label class="field-label">Код приглашения</label>
         <input id="join-code" class="field-input" type="text" placeholder="напр. a1b2c3d4" />
         <button class="btn-primary" id="join-server-btn">Присоединиться</button>
       </div>
-
       <div class="modal-error" id="modal-error"></div>
     </div>
   </div>
 
-  <!-- New-channel modal -->
   <div id="channel-modal-overlay" class="modal-overlay hidden">
     <div class="modal">
-      <button class="modal-close" id="channel-modal-close">✕</button>
+      <button class="modal-close" id="channel-modal-close"><svg class="ic ic-sm"><use href="#i-x"/></svg></button>
       <h3 class="modal-title">Создать канал</h3>
       <label class="field-label">Название канала</label>
       <input id="new-channel-name" class="field-input" type="text" maxlength="24" placeholder="новости" />

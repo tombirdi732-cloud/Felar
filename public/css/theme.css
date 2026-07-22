@@ -1,40 +1,52 @@
 /* ============================================================
    Roost — ТЕМА / БРЕНДИНГ
-   Это единственный файл, который нужно править под свой дизайн.
+   Единственный файл, который правится под свой дизайн.
    Загружается ПОСЛЕ style.css, поэтому переопределяет базовые значения.
    Картинки клади в public/assets/ (см. assets/README.md).
    ============================================================ */
 
+/* Шрифты подключены через <link> в <head> (index.html) — так быстрее,
+   чем @import, и не блокирует отрисовку. */
+
 :root {
-  /* --- Цвета бренда (поменяй hex под себя) --- */
-  --brand: #5865f2;
-  --brand-hover: #4752c4;
-  --green: #23a55a;
+  /* --- Палитра (из макета) --- */
+  --background: #0d1117;   /* основной фон / чат */
+  --rail: #080d14;         /* узкая панель серверов */
+  --sidebar: #0f1520;      /* список каналов, участники */
+  --card: #151d2e;
+  --popover: #1a2235;
+  --input-bg: #1e2a3e;
+  --secondary: #1e2a3e;
 
-  /* --- Фоны интерфейса (по желанию) --- */
-  --bg-rail: #1e1f22;
-  --bg-sidebar: #2b2d31;
-  --bg-chat: #313338;
+  --foreground: #dde4f0;   /* основной текст */
+  --muted: #64748b;        /* приглушённый текст */
+  --muted-2: #94a3b8;
 
-  /* --- Свои фоновые картинки ---
-     Раскомментируй и укажи файл. Пока закомментировано — используется
-     стандартный градиент/цвет. */
+  --primary: #e8a23a;      /* золотой акцент */
+  --primary-foreground: #0d1117;
+  --accent: #2dd4bf;       /* бирюзовый акцент */
+  --danger: #e53e3e;
+
+  --online: #34d399;
+  --idle: #fbbf24;
+  --offline: #64748b;
+
+  --border: rgba(255, 255, 255, 0.07);
+  --radius: 0.5rem;
+
+  --font-head: 'Bricolage Grotesque', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  /* --- Свои фоновые картинки (по желанию) --- */
   /* --auth-bg: url('/assets/backgrounds/auth.jpg') center/cover no-repeat; */
   /* --chat-bg: url('/assets/backgrounds/chat.png'); */
 }
 
-/* Фон экрана входа — применяется, только если задан --auth-bg */
+/* Фон экрана входа — свой, если задан --auth-bg */
 .auth-screen {
-  background: var(--auth-bg, radial-gradient(circle at 20% 20%, #404eed 0%, #5865f2 40%, #313338 100%));
+  background: var(--auth-bg,
+    radial-gradient(circle at 25% 15%, #1a1040 0%, #0f1520 45%, #0d1117 100%));
 }
 
-/* Фон области чата — применяется, только если задан --chat-bg */
-.chat {
-  background-image: var(--chat-bg, none);
-  background-size: cover;
-  background-position: center;
-}
-
-/* --- Логотип ---
-   Если положить public/assets/icons/logo.png, он подставится в шапку входа
-   через <img> в разметке (с текстовым запасным вариантом). */
+/* Фон чата — свой, если задан --chat-bg */
+.chat-main { background-image: var(--chat-bg, none); background-size: cover; background-position: center; }
