@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { dirname, join, isAbsolute } from 'path';
 import { mkdirSync } from 'fs';
+import { PERM } from './perms.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -94,6 +95,26 @@ db.exec(`
     attachment_type TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS roles (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+    name        TEXT    NOT NULL,
+    color       TEXT,
+    position    INTEGER NOT NULL DEFAULT 0,
+    permissions INTEGER NOT NULL DEFAULT 0,
+    is_default  INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS member_roles (
+    user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    server_id INTEGER NOT NULL,
+    role_id   INTEGER NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_roles_server      ON roles(server_id);
+  CREATE INDEX IF NOT EXISTS idx_member_roles_user ON member_roles(user_id, server_id);
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
   CREATE INDEX IF NOT EXISTS idx_channels_server  ON channels(server_id);
   CREATE INDEX IF NOT EXISTS idx_members_server    ON memberships(server_id);
@@ -117,5 +138,33 @@ ensureColumn('dm_messages', 'attachment_name', 'TEXT');
 ensureColumn('dm_messages', 'attachment_type', 'TEXT');
 ensureColumn('users', 'avatar', 'TEXT');
 ensureColumn('memberships', 'role', "TEXT NOT NULL DEFAULT 'member'");
+ensureColumn('channels', 'topic', 'TEXT');
+
+// --- seed default roles + migrate legacy admins into a role ---
+(() => {
+  const ts = Date.now();
+  const insEveryone = db.prepare(
+    "INSERT INTO roles (server_id, name, color, position, permissions, is_default, created_at) VALUES (?, '@everyone', NULL, 0, 0, 1, ?)"
+  );
+  for (const s of db.prepare('SELECT id FROM servers').all()) {
+    if (!db.prepare('SELECT 1 FROM roles WHERE server_id = ? AND is_default = 1').get(s.id)) {
+      insEveryone.run(s.id, ts);
+    }
+  }
+  const legacyAdmins = db.prepare("SELECT user_id, server_id FROM memberships WHERE role = 'admin'").all();
+  if (legacyAdmins.length) {
+    const adminPerms = PERM.MANAGE_CHANNELS | PERM.KICK_MEMBERS | PERM.MANAGE_MESSAGES | PERM.MANAGE_ROLES;
+    const getRole = db.prepare("SELECT id FROM roles WHERE server_id = ? AND name = 'Админ' AND is_default = 0");
+    const insRole = db.prepare(
+      "INSERT INTO roles (server_id, name, color, position, permissions, is_default, created_at) VALUES (?, 'Админ', '#e8a23a', 1, ?, 0, ?)"
+    );
+    const insMR = db.prepare('INSERT OR IGNORE INTO member_roles (user_id, server_id, role_id) VALUES (?, ?, ?)');
+    for (const am of legacyAdmins) {
+      let role = getRole.get(am.server_id);
+      if (!role) role = { id: insRole.run(am.server_id, adminPerms, ts).lastInsertRowid };
+      insMR.run(am.user_id, am.server_id, role.id);
+    }
+  }
+})();
 
 export default db;

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { writeFileSync } from 'fs';
 import { join, extname } from 'path';
 import db, { uploadsDir } from './db.js';
+import { PERM, ALL_PERMS } from './perms.js';
 import {
   hashPassword,
   verifyPassword,
@@ -13,6 +14,41 @@ import { broadcastToServer, isOnline, sendToUser } from './hub.js';
 
 const router = Router();
 const now = () => Date.now();
+
+/* ---------------------- Permissions ---------------------- */
+
+// Effective permission bitfield for a user on a server.
+function memberPermissions(userId, serverId) {
+  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
+  if (!server) return 0;
+  if (server.owner_id === userId) return ALL_PERMS;
+  const rows = db
+    .prepare(
+      `SELECT r.permissions FROM roles r
+       LEFT JOIN member_roles mr ON mr.role_id = r.id AND mr.user_id = ?
+       WHERE r.server_id = ? AND (r.is_default = 1 OR mr.user_id IS NOT NULL)`
+    )
+    .all(userId, serverId);
+  let perms = 0;
+  for (const r of rows) perms |= r.permissions;
+  return perms & PERM.ADMINISTRATOR ? ALL_PERMS : perms;
+}
+function hasPerm(userId, serverId, flag) {
+  return (memberPermissions(userId, serverId) & flag) === flag;
+}
+// Highest role position a user holds (owner ranks above everything).
+function highestPosition(userId, serverId) {
+  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
+  if (server && server.owner_id === userId) return Infinity;
+  const row = db
+    .prepare(
+      `SELECT MAX(r.position) AS p FROM roles r
+       JOIN member_roles mr ON mr.role_id = r.id
+       WHERE mr.user_id = ? AND r.server_id = ?`
+    )
+    .get(userId, serverId);
+  return row && row.p != null ? row.p : 0;
+}
 
 function makeInviteCode() {
   return crypto.randomBytes(4).toString('hex'); // 8 hex chars
@@ -102,7 +138,7 @@ function serializeServer(serverId) {
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
   if (!server) return null;
   const channels = db
-    .prepare('SELECT id, name, position FROM channels WHERE server_id = ? ORDER BY position, id')
+    .prepare('SELECT id, name, position, topic FROM channels WHERE server_id = ? ORDER BY position, id')
     .all(serverId);
   return {
     id: server.id,
@@ -141,6 +177,8 @@ router.post('/servers', authRequired, (req, res) => {
       .run(serverId, 'general', 0, now());
     db.prepare('INSERT INTO memberships (user_id, server_id, joined_at) VALUES (?, ?, ?)')
       .run(req.user.id, serverId, now());
+    db.prepare("INSERT INTO roles (server_id, name, color, position, permissions, is_default, created_at) VALUES (?, '@everyone', NULL, 0, 0, 1, ?)")
+      .run(serverId, now());
     return serverId;
   });
 
@@ -184,20 +222,42 @@ router.get('/servers/:id/members', authRequired, (req, res) => {
   const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
   const rows = db
     .prepare(
-      `SELECT u.id, u.username, u.avatar, m.role FROM users u
+      `SELECT u.id, u.username, u.avatar FROM users u
        JOIN memberships m ON m.user_id = u.id
        WHERE m.server_id = ?
        ORDER BY u.username`
     )
     .all(serverId);
-  const members = rows.map((u) => ({
-    id: u.id,
-    username: u.username,
-    avatar: u.avatar,
-    role: server && u.id === server.owner_id ? 'owner' : (u.role || 'member'),
-    online: isOnline(u.id),
-  }));
-  res.json({ members });
+  const roleRows = db
+    .prepare(
+      `SELECT mr.user_id, r.id, r.name, r.color, r.position FROM member_roles mr
+       JOIN roles r ON r.id = mr.role_id WHERE r.server_id = ?`
+    )
+    .all(serverId);
+  const byUser = {};
+  for (const rr of roleRows) (byUser[rr.user_id] ||= []).push(rr);
+
+  const members = rows.map((u) => {
+    const roles = (byUser[u.id] || []).sort((a, b) => b.position - a.position);
+    const isOwner = server && u.id === server.owner_id;
+    const top = isOwner
+      ? { name: 'Владелец', color: '#e8a23a' }
+      : (roles[0] ? { name: roles[0].name, color: roles[0].color } : null);
+    return {
+      id: u.id, username: u.username, avatar: u.avatar, online: isOnline(u.id),
+      owner: !!isOwner, role_ids: roles.map((r) => r.id), top,
+    };
+  });
+
+  const meOwner = !!(server && server.owner_id === req.user.id);
+  res.json({
+    members,
+    me: {
+      owner: meOwner,
+      permissions: memberPermissions(req.user.id, serverId),
+      position: meOwner ? Number.MAX_SAFE_INTEGER : highestPosition(req.user.id, serverId),
+    },
+  });
 });
 
 // Create a channel in a server.
@@ -205,7 +265,7 @@ router.post('/servers/:id/channels', authRequired, (req, res) => {
   const serverId = Number(req.params.id);
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
   if (!server) return res.status(404).json({ error: 'Сервер не найден' });
-  if (!canManage(getRole(req.user.id, serverId)))
+  if (!hasPerm(req.user.id, serverId, PERM.MANAGE_CHANNELS))
     return res.status(403).json({ error: 'Недостаточно прав' });
 
   let name = String(req.body?.name || '').trim().toLowerCase().replace(/\s+/g, '-');
@@ -227,38 +287,13 @@ router.post('/servers/:id/channels', authRequired, (req, res) => {
 
 /* ---------------------- Server management ---------------------- */
 
-// Helper: load a server and assert the current user owns it.
-function assertOwner(serverId, userId) {
-  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
-  if (!server) return { error: 404 };
-  if (server.owner_id !== userId) return { error: 403 };
-  return { server };
-}
-
-// A user's role on a server: 'owner' | 'admin' | 'member' | null (not a member).
-function getRole(userId, serverId) {
-  const s = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
-  if (!s) return null;
-  if (s.owner_id === userId) return 'owner';
-  const m = db.prepare('SELECT role FROM memberships WHERE user_id = ? AND server_id = ?').get(userId, serverId);
-  return m ? (m.role || 'member') : null;
-}
-function canManage(role) { return role === 'owner' || role === 'admin'; }
-
-// Assert the current user can manage (owner or admin) the given server.
-function assertManage(serverId, userId) {
-  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
-  if (!server) return { error: 404 };
-  const role = getRole(userId, serverId);
-  if (!canManage(role)) return { error: 403 };
-  return { server, role };
-}
-
-// Rename a server (owner only).
+// Rename a server (MANAGE_SERVER).
 router.patch('/servers/:id', authRequired, (req, res) => {
   const serverId = Number(req.params.id);
-  const { server, error } = assertOwner(serverId, req.user.id);
-  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец может изменять сервер' });
+  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  if (!hasPerm(req.user.id, serverId, PERM.MANAGE_SERVER))
+    return res.status(403).json({ error: 'Недостаточно прав' });
 
   const name = String(req.body?.name || '').trim();
   if (name.length < 2 || name.length > 40) return res.status(400).json({ error: 'Название: от 2 до 40 символов' });
@@ -271,11 +306,12 @@ router.patch('/servers/:id', authRequired, (req, res) => {
 // Delete a server (owner only).
 router.delete('/servers/:id', authRequired, (req, res) => {
   const serverId = Number(req.params.id);
-  const { error } = assertOwner(serverId, req.user.id);
-  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец может удалить сервер' });
+  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  if (server.owner_id !== req.user.id) return res.status(403).json({ error: 'Только владелец может удалить сервер' });
 
   broadcastToServer(serverId, { type: 'server_deleted', server_id: serverId });
-  db.prepare('DELETE FROM servers WHERE id = ?').run(serverId); // cascades channels/messages/memberships
+  db.prepare('DELETE FROM servers WHERE id = ?').run(serverId); // cascades channels/messages/memberships/roles
   res.json({ ok: true });
 });
 
@@ -288,76 +324,175 @@ router.post('/servers/:id/leave', authRequired, (req, res) => {
     return res.status(400).json({ error: 'Владелец не может выйти — удалите сервер' });
 
   db.prepare('DELETE FROM memberships WHERE user_id = ? AND server_id = ?').run(req.user.id, serverId);
+  db.prepare('DELETE FROM member_roles WHERE user_id = ? AND server_id = ?').run(req.user.id, serverId);
   broadcastToServer(serverId, { type: 'member_left', server_id: serverId, user_id: req.user.id });
   res.json({ ok: true });
 });
 
-// Kick a member (owner only).
+// Kick a member (KICK_MEMBERS + role hierarchy).
 router.delete('/servers/:id/members/:userId', authRequired, (req, res) => {
   const serverId = Number(req.params.id);
   const targetId = Number(req.params.userId);
-  const { role: actorRole, error } = assertManage(serverId, req.user.id);
-  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Недостаточно прав' });
+  const server = db.prepare('SELECT owner_id FROM servers WHERE id = ?').get(serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  if (!hasPerm(req.user.id, serverId, PERM.KICK_MEMBERS)) return res.status(403).json({ error: 'Недостаточно прав' });
   if (targetId === req.user.id) return res.status(400).json({ error: 'Нельзя исключить себя' });
+  if (server.owner_id === targetId) return res.status(403).json({ error: 'Нельзя исключить владельца' });
 
-  const targetRole = getRole(targetId, serverId);
-  if (!targetRole) return res.status(404).json({ error: 'Участник не найден' });
-  const rank = { owner: 3, admin: 2, member: 1 };
-  if (rank[targetRole] >= rank[actorRole])
+  const membership = db.prepare('SELECT 1 FROM memberships WHERE user_id = ? AND server_id = ?').get(targetId, serverId);
+  if (!membership) return res.status(404).json({ error: 'Участник не найден' });
+  if (highestPosition(req.user.id, serverId) <= highestPosition(targetId, serverId))
     return res.status(403).json({ error: 'Недостаточно прав для этого участника' });
 
   db.prepare('DELETE FROM memberships WHERE user_id = ? AND server_id = ?').run(targetId, serverId);
+  db.prepare('DELETE FROM member_roles WHERE user_id = ? AND server_id = ?').run(targetId, serverId);
   broadcastToServer(serverId, { type: 'member_left', server_id: serverId, user_id: targetId });
   sendToUser(targetId, { type: 'server_removed', server_id: serverId });
   res.json({ ok: true });
 });
 
-// Assign a role to a member (owner only): 'admin' or 'member'.
-router.patch('/servers/:id/members/:userId/role', authRequired, (req, res) => {
-  const serverId = Number(req.params.id);
-  const targetId = Number(req.params.userId);
-  const { error } = assertOwner(serverId, req.user.id);
-  if (error) return res.status(error).json({ error: error === 404 ? 'Сервер не найден' : 'Только владелец назначает роли' });
+/* ---------------------- Channel settings ---------------------- */
 
-  const role = String(req.body?.role || '');
-  if (!['admin', 'member'].includes(role)) return res.status(400).json({ error: 'Некорректная роль' });
-  if (targetId === req.user.id) return res.status(400).json({ error: 'Нельзя изменить свою роль' });
-
-  const membership = db.prepare('SELECT 1 FROM memberships WHERE user_id = ? AND server_id = ?').get(targetId, serverId);
-  if (!membership) return res.status(404).json({ error: 'Участник не найден' });
-
-  db.prepare('UPDATE memberships SET role = ? WHERE user_id = ? AND server_id = ?').run(role, targetId, serverId);
-  broadcastToServer(serverId, { type: 'member_role', server_id: serverId, user_id: targetId, role });
-  res.json({ ok: true, role });
-});
-
-// Rename a channel (owner only).
+// Edit a channel — name and/or topic (MANAGE_CHANNELS).
 router.patch('/channels/:id', authRequired, (req, res) => {
   const channelId = Number(req.params.id);
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
   if (!channel) return res.status(404).json({ error: 'Канал не найден' });
-  if (!canManage(getRole(req.user.id, channel.server_id)))
+  if (!hasPerm(req.user.id, channel.server_id, PERM.MANAGE_CHANNELS))
     return res.status(403).json({ error: 'Недостаточно прав' });
 
-  let name = String(req.body?.name || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9а-яё_-]/g, '');
-  if (name.length < 1 || name.length > 24) return res.status(400).json({ error: 'Некорректное имя канала' });
-
-  db.prepare('UPDATE channels SET name = ? WHERE id = ?').run(name, channelId);
-  broadcastToServer(channel.server_id, { type: 'channel_updated', server_id: channel.server_id, channel: { id: channelId, name } });
-  res.json({ ok: true, name });
+  let name = channel.name;
+  if (req.body?.name !== undefined) {
+    name = String(req.body.name).trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9а-яё_-]/g, '');
+    if (name.length < 1 || name.length > 24) return res.status(400).json({ error: 'Некорректное имя канала' });
+    db.prepare('UPDATE channels SET name = ? WHERE id = ?').run(name, channelId);
+  }
+  let topic = channel.topic;
+  if (req.body?.topic !== undefined) {
+    topic = String(req.body.topic).slice(0, 200);
+    db.prepare('UPDATE channels SET topic = ? WHERE id = ?').run(topic, channelId);
+  }
+  broadcastToServer(channel.server_id, { type: 'channel_updated', server_id: channel.server_id, channel: { id: channelId, name, topic } });
+  res.json({ ok: true, name, topic });
 });
 
-// Delete a channel (owner only).
+// Delete a channel (MANAGE_CHANNELS).
 router.delete('/channels/:id', authRequired, (req, res) => {
   const channelId = Number(req.params.id);
   const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
   if (!channel) return res.status(404).json({ error: 'Канал не найден' });
-  if (!canManage(getRole(req.user.id, channel.server_id)))
+  if (!hasPerm(req.user.id, channel.server_id, PERM.MANAGE_CHANNELS))
     return res.status(403).json({ error: 'Недостаточно прав' });
 
   db.prepare('DELETE FROM channels WHERE id = ?').run(channelId);
   broadcastToServer(channel.server_id, { type: 'channel_deleted', server_id: channel.server_id, channel_id: channelId });
   res.json({ ok: true });
+});
+
+/* ---------------------- Roles ---------------------- */
+
+function serializeRole(r) {
+  return { id: r.id, name: r.name, color: r.color, position: r.position, permissions: r.permissions, is_default: !!r.is_default };
+}
+
+// List roles of a server (any member).
+router.get('/servers/:id/roles', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  if (!assertMember(req.user.id, serverId)) return res.status(403).json({ error: 'Нет доступа' });
+  const roles = db.prepare('SELECT * FROM roles WHERE server_id = ? ORDER BY position DESC, id').all(serverId);
+  res.json({ roles: roles.map(serializeRole) });
+});
+
+// Create a role (MANAGE_ROLES).
+router.post('/servers/:id/roles', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const server = db.prepare('SELECT id FROM servers WHERE id = ?').get(serverId);
+  if (!server) return res.status(404).json({ error: 'Сервер не найден' });
+  if (!hasPerm(req.user.id, serverId, PERM.MANAGE_ROLES)) return res.status(403).json({ error: 'Недостаточно прав' });
+
+  const name = String(req.body?.name || '').trim().slice(0, 30);
+  if (!name) return res.status(400).json({ error: 'Укажите название роли' });
+  const color = req.body?.color ? String(req.body.color).slice(0, 9) : null;
+  let permissions = Number(req.body?.permissions) || 0;
+  permissions &= ALL_PERMS;
+  // You cannot grant permissions you don't have.
+  permissions &= memberPermissions(req.user.id, serverId);
+
+  const maxPos = db.prepare('SELECT COALESCE(MAX(position), 0) AS p FROM roles WHERE server_id = ?').get(serverId).p;
+  const info = db
+    .prepare('INSERT INTO roles (server_id, name, color, position, permissions, is_default, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)')
+    .run(serverId, name, color, maxPos + 1, permissions, now());
+  broadcastToServer(serverId, { type: 'roles_updated', server_id: serverId });
+  res.json({ role: serializeRole(db.prepare('SELECT * FROM roles WHERE id = ?').get(info.lastInsertRowid)) });
+});
+
+// Edit a role (MANAGE_ROLES + hierarchy).
+router.patch('/roles/:id', authRequired, (req, res) => {
+  const roleId = Number(req.params.id);
+  const role = db.prepare('SELECT * FROM roles WHERE id = ?').get(roleId);
+  if (!role) return res.status(404).json({ error: 'Роль не найдена' });
+  if (!hasPerm(req.user.id, role.server_id, PERM.MANAGE_ROLES)) return res.status(403).json({ error: 'Недостаточно прав' });
+  if (role.position >= highestPosition(req.user.id, role.server_id))
+    return res.status(403).json({ error: 'Нельзя изменять роль на своём уровне или выше' });
+
+  if (req.body?.name !== undefined && !role.is_default) {
+    const name = String(req.body.name).trim().slice(0, 30);
+    if (name) db.prepare('UPDATE roles SET name = ? WHERE id = ?').run(name, roleId);
+  }
+  if (req.body?.color !== undefined && !role.is_default) {
+    const color = req.body.color ? String(req.body.color).slice(0, 9) : null;
+    db.prepare('UPDATE roles SET color = ? WHERE id = ?').run(color, roleId);
+  }
+  if (req.body?.permissions !== undefined) {
+    let permissions = (Number(req.body.permissions) || 0) & ALL_PERMS;
+    permissions &= memberPermissions(req.user.id, role.server_id); // can't grant what you lack
+    db.prepare('UPDATE roles SET permissions = ? WHERE id = ?').run(permissions, roleId);
+  }
+  broadcastToServer(role.server_id, { type: 'roles_updated', server_id: role.server_id });
+  res.json({ ok: true });
+});
+
+// Delete a role (MANAGE_ROLES + hierarchy; not @everyone).
+router.delete('/roles/:id', authRequired, (req, res) => {
+  const roleId = Number(req.params.id);
+  const role = db.prepare('SELECT * FROM roles WHERE id = ?').get(roleId);
+  if (!role) return res.status(404).json({ error: 'Роль не найдена' });
+  if (role.is_default) return res.status(400).json({ error: 'Нельзя удалить роль @everyone' });
+  if (!hasPerm(req.user.id, role.server_id, PERM.MANAGE_ROLES)) return res.status(403).json({ error: 'Недостаточно прав' });
+  if (role.position >= highestPosition(req.user.id, role.server_id))
+    return res.status(403).json({ error: 'Нельзя удалить роль на своём уровне или выше' });
+
+  db.prepare('DELETE FROM roles WHERE id = ?').run(roleId); // cascades member_roles
+  broadcastToServer(role.server_id, { type: 'roles_updated', server_id: role.server_id });
+  res.json({ ok: true });
+});
+
+// Set a member's roles (MANAGE_ROLES + hierarchy).
+router.put('/servers/:id/members/:userId/roles', authRequired, (req, res) => {
+  const serverId = Number(req.params.id);
+  const targetId = Number(req.params.userId);
+  if (!hasPerm(req.user.id, serverId, PERM.MANAGE_ROLES)) return res.status(403).json({ error: 'Недостаточно прав' });
+  const membership = db.prepare('SELECT 1 FROM memberships WHERE user_id = ? AND server_id = ?').get(targetId, serverId);
+  if (!membership) return res.status(404).json({ error: 'Участник не найден' });
+
+  const wanted = Array.isArray(req.body?.role_ids) ? req.body.role_ids.map(Number) : [];
+  const roles = db.prepare('SELECT id, position, is_default FROM roles WHERE server_id = ?').all(serverId);
+  const actorPos = highestPosition(req.user.id, serverId);
+  const valid = new Set(roles.filter((r) => !r.is_default && r.position < actorPos).map((r) => r.id));
+  // Keep the target's roles that are at/above the actor's level (can't touch those),
+  // plus the requested roles the actor is allowed to assign.
+  const current = db.prepare('SELECT role_id FROM member_roles WHERE user_id = ? AND server_id = ?').all(targetId, serverId).map((r) => r.role_id);
+  const locked = current.filter((rid) => !valid.has(rid));
+  const finalSet = new Set([...locked, ...wanted.filter((rid) => valid.has(rid))]);
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM member_roles WHERE user_id = ? AND server_id = ?').run(targetId, serverId);
+    const ins = db.prepare('INSERT OR IGNORE INTO member_roles (user_id, server_id, role_id) VALUES (?, ?, ?)');
+    for (const rid of finalSet) ins.run(targetId, serverId, rid);
+  });
+  tx();
+  broadcastToServer(serverId, { type: 'member_roles_updated', server_id: serverId, user_id: targetId });
+  res.json({ ok: true, role_ids: [...finalSet] });
 });
 
 /* --------------------------- Messages --------------------------- */
@@ -447,7 +582,7 @@ router.patch('/messages/:id', authRequired, (req, res) => {
 router.delete('/messages/:id', authRequired, (req, res) => {
   const { message, error } = loadMessageForUser(Number(req.params.id), req.user.id);
   if (error) return res.status(error).json({ error: error === 404 ? 'Сообщение не найдено' : 'Нет доступа' });
-  if (message.user_id !== req.user.id && !canManage(getRole(req.user.id, message.server_id)))
+  if (message.user_id !== req.user.id && !hasPerm(req.user.id, message.server_id, PERM.MANAGE_MESSAGES))
     return res.status(403).json({ error: 'Нет прав на удаление' });
 
   db.prepare('DELETE FROM messages WHERE id = ?').run(message.id);

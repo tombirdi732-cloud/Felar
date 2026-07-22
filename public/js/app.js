@@ -16,6 +16,10 @@ const state = {
   dmThreads: [],
   currentDmId: null,
   dmPeer: null,
+  roles: [],
+  myPerms: 0,
+  myPosition: 0,
+  myOwner: false,
 };
 
 /* ----------------------- helpers ----------------------- */
@@ -262,12 +266,24 @@ function selectServer(serverId) {
   state.currentServerId = serverId;
   const server = state.servers.find((s) => s.id === serverId);
   if (!server) return;
+  // Optimistic perms: owner sees management immediately; others until members load.
+  state.myOwner = server.owner_id === state.user.id;
+  state.myPerms = 0;
+  state.roles = [];
   renderRail();
   $('server-name').textContent = server.name;
   renderTree();
   loadMembers(serverId);
+  loadRoles(serverId);
   if (server.channels.length) selectChannel(server.channels[0].id);
   else { state.currentChannelId = null; resetChat(); }
+}
+
+async function loadRoles(serverId) {
+  try {
+    const { roles } = await api(`/servers/${serverId}/roles`);
+    if (serverId === state.currentServerId) state.roles = roles;
+  } catch { /* ignore */ }
 }
 
 /* ------------------- channel tree ------------------- */
@@ -285,7 +301,7 @@ function renderTree() {
   const chev = icon('chevron-down', 'ic'); chev.style.width = '12px'; chev.style.height = '12px';
   head.appendChild(chev);
   head.appendChild(el('span', 'cat-name', 'Каналы'));
-  if (canModerate()) {
+  if (hasPerm(PERM.MANAGE_CHANNELS)) {
     const add = el('span', 'cat-add');
     add.appendChild(icon('plus', 'ic ic-sm'));
     add.title = 'Создать канал';
@@ -336,7 +352,7 @@ async function selectChannel(channelId) {
   if (!channel) return;
   renderTree();
   $('channel-name').textContent = channel.name;
-  $('channel-topic').textContent = `Канал #${channel.name}`;
+  $('channel-topic').textContent = channel.topic || `Канал #${channel.name}`;
   $('composer-input').disabled = false;
   $('composer-input').placeholder = `Написать в #${channel.name}`;
   await loadMessages(channelId);
@@ -377,16 +393,21 @@ async function loadMessages(channelId) {
 const REACTION_EMOJIS = ['👍', '❤️', '🔥', '😂', '🎉', '✅'];
 const msgById = new Map(); // id -> message data (for in-place updates)
 
-// Current user's role on the active server.
-function myRole() {
-  const server = state.servers.find((s) => s.id === state.currentServerId);
-  if (!server) return null;
-  if (server.owner_id === state.user.id) return 'owner';
-  const me = state.members.find((m) => m.id === state.user.id);
-  return me ? (me.role || 'member') : 'member';
+// Permission flags (mirror of server/perms.js).
+const PERM = { ADMINISTRATOR: 1, MANAGE_SERVER: 2, MANAGE_ROLES: 4, MANAGE_CHANNELS: 8, KICK_MEMBERS: 16, MANAGE_MESSAGES: 32 };
+const PERM_LIST = [
+  ['MANAGE_SERVER', 'Управление сервером'],
+  ['MANAGE_ROLES', 'Управление ролями'],
+  ['MANAGE_CHANNELS', 'Управление каналами'],
+  ['KICK_MEMBERS', 'Исключение участников'],
+  ['MANAGE_MESSAGES', 'Управление сообщениями'],
+  ['ADMINISTRATOR', 'Администратор (все права)'],
+];
+function hasPerm(flag) {
+  if (state.myOwner) return true;
+  if (state.myPerms & PERM.ADMINISTRATOR) return true;
+  return (state.myPerms & flag) === flag;
 }
-function canModerate() { const r = myRole(); return r === 'owner' || r === 'admin'; }
-const ROLE_LABEL = { owner: 'Владелец', admin: 'Админ', member: 'Участник' };
 
 // (Re)build the body of a message row from its data.
 function fillMessageBody(row, m) {
@@ -436,7 +457,7 @@ function fillMessageBody(row, m) {
     editBtn.addEventListener('click', (e) => { e.stopPropagation(); startEdit(row, m); });
     actions.appendChild(editBtn);
   }
-  if (m.user_id === state.user.id || canModerate()) {
+  if (m.user_id === state.user.id || hasPerm(PERM.MANAGE_MESSAGES)) {
     const delBtn = el('button', 'ha-btn danger');
     delBtn.appendChild(icon('x', 'ic ic-sm'));
     delBtn.title = 'Удалить';
@@ -565,16 +586,19 @@ $('dm-attach').addEventListener('click', () => pickAndSendFile('dm'));
 /* ------------------- members ------------------- */
 async function loadMembers(serverId) {
   try {
-    const { members } = await api(`/servers/${serverId}/members`);
+    const { members, me } = await api(`/servers/${serverId}/members`);
+    if (serverId !== state.currentServerId) return;
     state.members = members;
+    if (me) { state.myPerms = me.permissions; state.myOwner = me.owner; state.myPosition = me.position; }
     renderMembers();
-    if (state.view === 'chat' && serverId === state.currentServerId) renderTree();
+    if (state.view === 'chat') renderTree();
   } catch { /* ignore */ }
 }
 function renderMembers() {
   const box = $('members-list');
   box.innerHTML = '';
-  const roleOf = (m) => ROLE_LABEL[m.role] || 'Участник';
+  const roleOf = (m) => (m.owner ? 'Владелец' : (m.top ? m.top.name : 'Участник'));
+  const roleColor = (m) => (m.owner ? '#e8a23a' : (m.top && m.top.color) || null);
   const online = state.members.filter((m) => m.online);
   const offline = state.members.filter((m) => !m.online);
 
@@ -586,7 +610,10 @@ function renderMembers() {
       row.appendChild(avatarEl(m.username, { size: 'sm', status: isOnline ? 'online' : 'offline', avatar: m.avatar }));
       const info = el('div');
       info.style.minWidth = '0';
-      info.appendChild(el('div', 'm-name', m.username));
+      const nameEl = el('div', 'm-name', m.username);
+      const rc = roleColor(m);
+      if (rc) nameEl.style.color = rc;
+      info.appendChild(nameEl);
       info.appendChild(el('div', 'm-role', roleOf(m)));
       row.appendChild(info);
       if (m.id !== state.user.id) {
@@ -743,7 +770,12 @@ function handleWsEvent(msg) {
     case 'presence': setPresence(msg.user.id, msg.online); break;
     case 'member_joined': if (msg.server_id === state.currentServerId) loadMembers(msg.server_id); break;
     case 'member_left': handleMemberLeft(msg); break;
-    case 'member_role': handleMemberRole(msg); break;
+    case 'member_roles_updated':
+      if (msg.server_id === state.currentServerId) loadMembers(msg.server_id).then(refreshSettingsIfOpen);
+      break;
+    case 'roles_updated':
+      if (msg.server_id === state.currentServerId) { loadRoles(msg.server_id).then(refreshSettingsIfOpen); loadMembers(msg.server_id); }
+      break;
     case 'channel_created': handleChannelCreated(msg); break;
     case 'channel_updated': applyChannelUpdate(msg.server_id, msg.channel); break;
     case 'channel_deleted': removeChannelLocally(msg.server_id, msg.channel_id); break;
@@ -847,37 +879,46 @@ $('create-channel-btn').addEventListener('click', async () => {
 });
 
 /* ======================= Server settings ======================= */
-const RANK = { owner: 3, admin: 2, member: 1 };
+
+// A generic modal dialog built on the fly (for channel/role/member editors).
+function openDialog(title, build) {
+  const overlay = el('div', 'modal-overlay');
+  const modal = el('div', 'modal');
+  const close = el('button', 'modal-close'); close.appendChild(icon('x', 'ic ic-sm'));
+  const closeFn = () => overlay.remove();
+  close.addEventListener('click', closeFn);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closeFn(); });
+  modal.appendChild(close);
+  modal.appendChild(el('h3', 'modal-title', title));
+  const body = el('div'); modal.appendChild(body);
+  const err = el('div', 'modal-error'); modal.appendChild(err);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  build(body, err, closeFn);
+  return closeFn;
+}
+
+function memberPosition(m) {
+  if (m.owner) return Infinity;
+  let p = 0;
+  for (const rid of m.role_ids || []) { const r = state.roles.find((x) => x.id === rid); if (r && r.position > p) p = r.position; }
+  return p;
+}
+function canKick(m) {
+  return hasPerm(PERM.KICK_MEMBERS) && !m.owner && m.id !== state.user.id && state.myPosition > memberPosition(m);
+}
+
 function openServerSettings() {
   const server = state.servers.find((s) => s.id === state.currentServerId);
   if (!server) return;
-  const role = myRole();
-  const isOwner = role === 'owner';
-  const isManager = role === 'owner' || role === 'admin';
+  const isOwner = state.myOwner;
   const body = $('ss-body');
   body.innerHTML = '';
   $('ss-error').textContent = '';
+  const reopen = () => openServerSettings();
 
-  const addLeave = () => {
-    const leave = el('button', 'btn-danger', 'Выйти с сервера');
-    leave.addEventListener('click', async () => {
-      if (!confirm('Выйти с сервера?')) return;
-      try { await api(`/servers/${server.id}/leave`, { method: 'POST' }); removeServerLocally(server.id); $('server-settings-overlay').classList.add('hidden'); }
-      catch (e) { $('ss-error').textContent = e.message; }
-    });
-    body.appendChild(leave);
-  };
-
-  // Plain members: only a leave action.
-  if (!isManager) {
-    body.appendChild(Object.assign(el('p', 's-desc', 'Ты участник этого сервера.'), { style: 'margin:4px 0 16px' }));
-    addLeave();
-    $('server-settings-overlay').classList.remove('hidden');
-    return;
-  }
-
-  // Owner: rename server.
-  if (isOwner) {
+  // Rename server (MANAGE_SERVER).
+  if (hasPerm(PERM.MANAGE_SERVER)) {
     body.appendChild(el('div', 'field-label', 'Название сервера'));
     const nameRow = el('div', 'ss-inline');
     const nameInput = el('input', 'field-input');
@@ -891,60 +932,76 @@ function openServerSettings() {
     body.appendChild(nameRow);
   }
 
-  // Managers: channel management.
-  body.appendChild(el('div', 'field-label', 'Каналы'));
-  for (const ch of server.channels) {
-    const row = el('div', 'ss-row');
-    const inp = el('input', 'ss-row-input'); inp.value = ch.name;
-    const rn = el('button', 'icon-btn'); rn.appendChild(icon('edit', 'ic ic-sm')); rn.title = 'Переименовать';
-    rn.addEventListener('click', async () => {
-      try { await api(`/channels/${ch.id}`, { method: 'PATCH', body: { name: inp.value.trim() } }); }
-      catch (e) { $('ss-error').textContent = e.message; }
-    });
-    const del = el('button', 'icon-btn danger'); del.appendChild(icon('x', 'ic ic-sm')); del.title = 'Удалить канал';
-    del.addEventListener('click', async () => {
-      if (!confirm(`Удалить канал #${ch.name}?`)) return;
-      try { await api(`/channels/${ch.id}`, { method: 'DELETE' }); openServerSettings(); }
-      catch (e) { $('ss-error').textContent = e.message; }
-    });
-    row.appendChild(inp); row.appendChild(rn); row.appendChild(del);
-    body.appendChild(row);
+  // Channels (MANAGE_CHANNELS) — each opens its own settings dialog.
+  if (hasPerm(PERM.MANAGE_CHANNELS)) {
+    body.appendChild(el('div', 'field-label', 'Каналы'));
+    for (const ch of server.channels) {
+      const row = el('div', 'ss-row');
+      row.appendChild(Object.assign(el('span', 'ss-member-name', `# ${ch.name}`), {}));
+      const gear = el('button', 'btn-mini', 'Настроить');
+      gear.addEventListener('click', () => openChannelSettings(ch));
+      row.appendChild(gear);
+      body.appendChild(row);
+    }
   }
 
-  // Members: role labels; owner can assign roles; managers can kick lower ranks.
-  body.appendChild(el('div', 'field-label', 'Участники'));
-  for (const m of state.members) {
-    const row = el('div', 'ss-row');
-    row.appendChild(avatarEl(m.username, { size: 'sm', avatar: m.avatar }));
-    row.appendChild(el('span', 'ss-member-name', `${m.username} · ${ROLE_LABEL[m.role] || 'участник'}`));
+  // Roles (MANAGE_ROLES).
+  if (hasPerm(PERM.MANAGE_ROLES)) {
+    const head = el('div', 'ss-inline'); head.style.justifyContent = 'space-between'; head.style.alignItems = 'center';
+    head.appendChild(el('div', 'field-label', 'Роли'));
+    const add = el('button', 'btn-mini', '+ Роль');
+    add.addEventListener('click', () => openRoleEditor(null));
+    head.appendChild(add);
+    body.appendChild(head);
 
-    if (isOwner && m.role !== 'owner') {
-      const sel = el('select', 'ss-role-select');
-      for (const r of ['member', 'admin']) {
-        const o = el('option', null, ROLE_LABEL[r]); o.value = r;
-        if (m.role === r) o.selected = true;
-        sel.appendChild(o);
+    for (const r of state.roles) {
+      const row = el('div', 'ss-row');
+      const dot = el('span', 'role-dot'); dot.style.background = r.color || '#94a3b8';
+      row.appendChild(dot);
+      row.appendChild(el('span', 'ss-member-name', r.is_default ? '@everyone' : r.name));
+      if (r.position < state.myPosition) {
+        const ed = el('button', 'icon-btn'); ed.appendChild(icon('edit', 'ic ic-sm')); ed.title = 'Изменить';
+        ed.addEventListener('click', () => openRoleEditor(r));
+        row.appendChild(ed);
+        if (!r.is_default) {
+          const del = el('button', 'icon-btn danger'); del.appendChild(icon('x', 'ic ic-sm')); del.title = 'Удалить роль';
+          del.addEventListener('click', async () => {
+            if (!confirm(`Удалить роль «${r.name}»?`)) return;
+            try { await api(`/roles/${r.id}`, { method: 'DELETE' }); } catch (e) { $('ss-error').textContent = e.message; }
+          });
+          row.appendChild(del);
+        }
       }
-      sel.addEventListener('change', async () => {
-        try { await api(`/servers/${server.id}/members/${m.id}/role`, { method: 'PATCH', body: { role: sel.value } }); }
-        catch (e) { $('ss-error').textContent = e.message; loadMembers(server.id).then(openServerSettings); }
-      });
-      row.appendChild(sel);
+      body.appendChild(row);
     }
-
-    if (m.id !== state.user.id && RANK[m.role] < RANK[role]) {
-      const kick = el('button', 'btn-mini danger', 'Кик');
-      kick.addEventListener('click', async () => {
-        if (!confirm(`Исключить ${m.username}?`)) return;
-        try { await api(`/servers/${server.id}/members/${m.id}`, { method: 'DELETE' }); loadMembers(server.id).then(openServerSettings); }
-        catch (e) { $('ss-error').textContent = e.message; }
-      });
-      row.appendChild(kick);
-    }
-    body.appendChild(row);
   }
 
-  // Owner: delete server; admins can leave.
+  // Members (MANAGE_ROLES to assign, KICK_MEMBERS to remove).
+  if (hasPerm(PERM.MANAGE_ROLES) || hasPerm(PERM.KICK_MEMBERS)) {
+    body.appendChild(el('div', 'field-label', 'Участники'));
+    for (const m of state.members) {
+      const row = el('div', 'ss-row');
+      row.appendChild(avatarEl(m.username, { size: 'sm', avatar: m.avatar }));
+      const label = m.owner ? 'Владелец' : (m.top ? m.top.name : 'Участник');
+      row.appendChild(el('span', 'ss-member-name', `${m.username} · ${label}`));
+      if (hasPerm(PERM.MANAGE_ROLES) && !m.owner) {
+        const rolesBtn = el('button', 'btn-mini', 'Роли');
+        rolesBtn.addEventListener('click', () => openMemberRoles(m));
+        row.appendChild(rolesBtn);
+      }
+      if (canKick(m)) {
+        const kick = el('button', 'btn-mini danger', 'Кик');
+        kick.addEventListener('click', async () => {
+          if (!confirm(`Исключить ${m.username}?`)) return;
+          try { await api(`/servers/${server.id}/members/${m.id}`, { method: 'DELETE' }); } catch (e) { $('ss-error').textContent = e.message; }
+        });
+        row.appendChild(kick);
+      }
+      body.appendChild(row);
+    }
+  }
+
+  // Danger zone.
   if (isOwner) {
     const danger = el('button', 'btn-danger', 'Удалить сервер');
     danger.addEventListener('click', async () => {
@@ -954,10 +1011,106 @@ function openServerSettings() {
     });
     body.appendChild(danger);
   } else {
-    addLeave();
+    if (!hasPerm(PERM.MANAGE_SERVER) && !hasPerm(PERM.MANAGE_CHANNELS) && !hasPerm(PERM.MANAGE_ROLES) && !hasPerm(PERM.KICK_MEMBERS)) {
+      body.appendChild(Object.assign(el('p', 's-desc', 'Ты участник этого сервера.'), { style: 'margin:4px 0 16px' }));
+    }
+    const leave = el('button', 'btn-danger', 'Выйти с сервера');
+    leave.addEventListener('click', async () => {
+      if (!confirm('Выйти с сервера?')) return;
+      try { await api(`/servers/${server.id}/leave`, { method: 'POST' }); removeServerLocally(server.id); $('server-settings-overlay').classList.add('hidden'); }
+      catch (e) { $('ss-error').textContent = e.message; }
+    });
+    body.appendChild(leave);
   }
 
   $('server-settings-overlay').classList.remove('hidden');
+}
+
+// --- channel settings dialog ---
+function openChannelSettings(ch) {
+  openDialog(`Канал #${ch.name}`, (body, err, close) => {
+    body.appendChild(el('div', 'field-label', 'Название'));
+    const name = el('input', 'field-input'); name.value = ch.name; name.maxLength = 24;
+    body.appendChild(name);
+    body.appendChild(el('div', 'field-label', 'Тема канала'));
+    const topic = el('textarea', 'edit-input'); topic.value = ch.topic || ''; topic.placeholder = 'О чём этот канал…'; topic.maxLength = 200;
+    body.appendChild(topic);
+    const save = el('button', 'btn-primary', 'Сохранить');
+    save.addEventListener('click', async () => {
+      try { await api(`/channels/${ch.id}`, { method: 'PATCH', body: { name: name.value.trim(), topic: topic.value } }); close(); }
+      catch (e) { err.textContent = e.message; }
+    });
+    body.appendChild(save);
+    const del = el('button', 'btn-danger', 'Удалить канал');
+    del.addEventListener('click', async () => {
+      if (!confirm(`Удалить канал #${ch.name}?`)) return;
+      try { await api(`/channels/${ch.id}`, { method: 'DELETE' }); close(); } catch (e) { err.textContent = e.message; }
+    });
+    body.appendChild(del);
+  });
+}
+
+// --- role editor dialog (create or edit) ---
+function openRoleEditor(role) {
+  const editing = !!role;
+  openDialog(editing ? `Роль «${role.is_default ? '@everyone' : role.name}»` : 'Новая роль', (body, err, close) => {
+    let name, color;
+    if (!role || !role.is_default) {
+      body.appendChild(el('div', 'field-label', 'Название'));
+      name = el('input', 'field-input'); name.value = role ? role.name : ''; name.maxLength = 30; name.placeholder = 'Модератор';
+      body.appendChild(name);
+      body.appendChild(el('div', 'field-label', 'Цвет'));
+      color = el('input'); color.type = 'color'; color.value = (role && role.color) || '#e8a23a'; color.className = 'role-color-input';
+      body.appendChild(color);
+    }
+    body.appendChild(el('div', 'field-label', 'Права'));
+    const permBoxes = {};
+    for (const [key, label] of PERM_LIST) {
+      const line = el('label', 'perm-line');
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = role ? !!(role.permissions & PERM[key]) : false;
+      permBoxes[key] = cb;
+      line.appendChild(cb); line.appendChild(el('span', null, label));
+      body.appendChild(line);
+    }
+    const save = el('button', 'btn-primary', editing ? 'Сохранить' : 'Создать');
+    save.addEventListener('click', async () => {
+      let permissions = 0;
+      for (const [key] of PERM_LIST) if (permBoxes[key].checked) permissions |= PERM[key];
+      const payload = { permissions };
+      if (name) payload.name = name.value.trim();
+      if (color) payload.color = color.value;
+      try {
+        if (editing) await api(`/roles/${role.id}`, { method: 'PATCH', body: payload });
+        else await api(`/servers/${state.currentServerId}/roles`, { method: 'POST', body: payload });
+        close();
+      } catch (e) { err.textContent = e.message; }
+    });
+    body.appendChild(save);
+  });
+}
+
+// --- member role assignment dialog ---
+function openMemberRoles(m) {
+  openDialog(`Роли · ${m.username}`, (body, err, close) => {
+    const assignable = state.roles.filter((r) => !r.is_default && r.position < state.myPosition);
+    if (!assignable.length) body.appendChild(el('p', 's-desc', 'Нет ролей, которые ты можешь назначить.'));
+    const boxes = {};
+    for (const r of assignable) {
+      const line = el('label', 'perm-line');
+      const cb = el('input'); cb.type = 'checkbox'; cb.checked = (m.role_ids || []).includes(r.id);
+      boxes[r.id] = cb;
+      const dot = el('span', 'role-dot'); dot.style.background = r.color || '#94a3b8';
+      line.appendChild(cb); line.appendChild(dot); line.appendChild(el('span', null, r.name));
+      body.appendChild(line);
+    }
+    const save = el('button', 'btn-primary', 'Сохранить');
+    save.addEventListener('click', async () => {
+      const role_ids = Object.keys(boxes).filter((id) => boxes[id].checked).map(Number);
+      try { await api(`/servers/${state.currentServerId}/members/${m.id}/roles`, { method: 'PUT', body: { role_ids } }); close(); }
+      catch (e) { err.textContent = e.message; }
+    });
+    body.appendChild(save);
+  });
 }
 document.querySelector('.sidebar-header').addEventListener('click', () => {
   if (state.currentServerId) openServerSettings();
@@ -987,13 +1140,13 @@ function applyChannelUpdate(serverId, channel) {
   const s = state.servers.find((x) => x.id === serverId);
   if (!s) return;
   const ch = s.channels.find((c) => c.id === channel.id);
-  if (ch) ch.name = channel.name;
+  if (ch) { ch.name = channel.name; if (channel.topic !== undefined) ch.topic = channel.topic; }
   if (serverId === state.currentServerId) {
     renderTree();
-    if (state.currentChannelId === channel.id) {
-      $('channel-name').textContent = channel.name;
-      $('channel-topic').textContent = 'Канал #' + channel.name;
-      $('composer-input').placeholder = 'Написать в #' + channel.name;
+    if (state.currentChannelId === channel.id && ch) {
+      $('channel-name').textContent = ch.name;
+      $('channel-topic').textContent = ch.topic || ('Канал #' + ch.name);
+      $('composer-input').placeholder = 'Написать в #' + ch.name;
     }
   }
 }
@@ -1014,13 +1167,9 @@ function handleMemberLeft(msg) {
     if (!$('server-settings-overlay').classList.contains('hidden')) openServerSettings();
   });
 }
-function handleMemberRole(msg) {
-  if (msg.server_id !== state.currentServerId) return;
-  const m = state.members.find((x) => x.id === msg.user_id);
-  if (m) m.role = msg.role;
-  renderMembers();
-  if (state.view === 'chat') renderTree(); // my own perms may have changed
+function refreshSettingsIfOpen() {
   if (!$('server-settings-overlay').classList.contains('hidden')) openServerSettings();
+  if (state.view === 'chat') renderTree();
 }
 
 /* ======================= Direct messages ======================= */
