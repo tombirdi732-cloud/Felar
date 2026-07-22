@@ -230,9 +230,36 @@ input, textarea { font-family: inherit; }
 .msg .time { font-size: 11px; color: var(--muted); }
 .msg.grouped .head { display: none; }
 .msg .text { font-size: 14px; line-height: 1.55; color: rgba(221, 228, 240, 0.9); white-space: pre-wrap; word-wrap: break-word; }
-.msg .hover-actions { position: absolute; top: -10px; right: 12px; display: none; gap: 2px;
-  background: var(--popover); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.msg .text .edited { font-size: 10px; color: var(--muted); }
+.msg .hover-actions { position: absolute; top: -14px; right: 12px; display: none; gap: 2px;
+  background: var(--popover); border: 1px solid var(--border); border-radius: 8px; padding: 2px; z-index: 5; }
 .msg:hover .hover-actions { display: flex; }
+.ha-btn { background: none; border: none; color: var(--muted); padding: 5px; border-radius: 6px; display: flex; }
+.ha-btn:hover { color: var(--foreground); background: var(--secondary); }
+.ha-btn.danger:hover { color: var(--danger); }
+
+/* reaction pills */
+.reactions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.reaction { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 20px;
+  background: var(--secondary); border: 1px solid var(--border); color: var(--foreground); font-size: 13px; line-height: 1.4; }
+.reaction:hover { border-color: var(--muted); }
+.reaction.mine { background: rgba(232, 162, 58, 0.15); border-color: rgba(232, 162, 58, 0.5); }
+.reaction .rc { font-size: 12px; color: var(--muted-2); }
+.reaction.mine .rc { color: var(--primary); }
+
+/* emoji picker */
+.emoji-picker { position: absolute; top: -20px; right: 44px; display: flex; gap: 2px; z-index: 6;
+  background: var(--popover); border: 1px solid var(--border); border-radius: 10px; padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+.emoji-opt { background: none; border: none; font-size: 18px; padding: 4px 6px; border-radius: 6px; line-height: 1; }
+.emoji-opt:hover { background: var(--secondary); transform: scale(1.15); }
+
+/* inline edit */
+.edit-box { margin-top: 4px; }
+.edit-input { width: 100%; min-height: 40px; resize: vertical; background: var(--input-bg);
+  border: 1px solid rgba(232,162,58,0.4); border-radius: 8px; color: var(--foreground);
+  font-size: 14px; padding: 8px 10px; outline: none; font-family: var(--font-body); }
+.edit-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
 .typing { height: 20px; padding: 0 20px; font-size: 12px; color: var(--muted); font-style: italic; }
 

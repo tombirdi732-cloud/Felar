@@ -60,9 +60,11 @@ function handleMessage(ws, raw) {
         channel_id: channelId,
         content,
         created_at: ts,
+        edited_at: null,
         user_id: user.id,
         username: user.username,
         avatar: user.avatar,
+        reactions: [],
       },
     };
     // Deliver to all members of the server (including sender, for confirmation).

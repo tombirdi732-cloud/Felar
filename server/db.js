@@ -53,12 +53,28 @@ db.exec(`
     channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content    TEXT    NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    edited_at  INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS reactions (
+    message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    emoji      TEXT    NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, user_id, emoji)
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
   CREATE INDEX IF NOT EXISTS idx_channels_server  ON channels(server_id);
   CREATE INDEX IF NOT EXISTS idx_members_server    ON memberships(server_id);
+  CREATE INDEX IF NOT EXISTS idx_reactions_msg     ON reactions(message_id);
 `);
+
+// --- lightweight migrations for databases created before these columns ---
+const messageCols = db.prepare("PRAGMA table_info(messages)").all().map((c) => c.name);
+if (!messageCols.includes('edited_at')) {
+  db.exec('ALTER TABLE messages ADD COLUMN edited_at INTEGER');
+}
 
 export default db;

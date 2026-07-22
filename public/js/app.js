@@ -281,6 +281,7 @@ async function loadMessages(channelId) {
   const box = $('messages');
   box.innerHTML = '';
   lastMsg = null;
+  msgById.clear();
   const { messages } = await api(`/channels/${channelId}/messages`);
   if (!messages.length) {
     const hint = el('div', 'empty-hint');
@@ -298,23 +299,84 @@ async function loadMessages(channelId) {
   scrollToBottom();
 }
 
+const REACTION_EMOJIS = ['👍', '❤️', '🔥', '😂', '🎉', '✅'];
+const msgById = new Map(); // id -> message data (for in-place updates)
+
+function canModerate() {
+  const server = state.servers.find((s) => s.id === state.currentServerId);
+  return server && server.owner_id === state.user.id;
+}
+
+// (Re)build the body of a message row from its data.
+function fillMessageBody(row, m) {
+  const body = row.querySelector('.body');
+  body.innerHTML = '';
+
+  const head = el('div', 'head');
+  head.appendChild(el('span', 'author', m.username));
+  head.appendChild(el('span', 'time', formatTime(m.created_at)));
+  body.appendChild(head);
+
+  const textWrap = el('div', 'text');
+  textWrap.appendChild(document.createTextNode(m.content));
+  if (m.edited_at) {
+    const ed = el('span', 'edited', ' (изменено)');
+    textWrap.appendChild(ed);
+  }
+  body.appendChild(textWrap);
+
+  // reactions
+  if (m.reactions && m.reactions.length) {
+    const wrap = el('div', 'reactions');
+    for (const r of m.reactions) {
+      const mine = r.users && r.users.includes(state.user.id);
+      const pill = el('button', 'reaction' + (mine ? ' mine' : ''));
+      pill.appendChild(el('span', null, r.emoji));
+      pill.appendChild(el('span', 'rc', String(r.count)));
+      pill.addEventListener('click', () => toggleReaction(m.id, r.emoji));
+      wrap.appendChild(pill);
+    }
+    body.appendChild(wrap);
+  }
+
+  // hover actions
+  const actions = el('div', 'hover-actions');
+  const reactBtn = el('button', 'ha-btn');
+  reactBtn.appendChild(icon('smile', 'ic ic-sm'));
+  reactBtn.title = 'Реакция';
+  reactBtn.addEventListener('click', (e) => { e.stopPropagation(); openEmojiPicker(row, m.id); });
+  actions.appendChild(reactBtn);
+
+  if (m.user_id === state.user.id) {
+    const editBtn = el('button', 'ha-btn');
+    editBtn.appendChild(icon('edit', 'ic ic-sm'));
+    editBtn.title = 'Редактировать';
+    editBtn.addEventListener('click', (e) => { e.stopPropagation(); startEdit(row, m); });
+    actions.appendChild(editBtn);
+  }
+  if (m.user_id === state.user.id || canModerate()) {
+    const delBtn = el('button', 'ha-btn danger');
+    delBtn.appendChild(icon('x', 'ic ic-sm'));
+    delBtn.title = 'Удалить';
+    delBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteMessage(m.id); });
+    actions.appendChild(delBtn);
+  }
+  body.appendChild(actions);
+}
+
 function appendMessage(m, animate = true) {
   if (m.channel_id && m.channel_id !== state.currentChannelId) return;
   const box = $('messages');
   const hint = box.querySelector('.empty-hint');
   if (hint) hint.remove();
 
+  msgById.set(m.id, m);
   const grouped = lastMsg && lastMsg.user_id === m.user_id && m.created_at - lastMsg.created_at < 5 * 60 * 1000;
   const row = el('div', 'msg' + (grouped ? ' grouped' : ''));
+  row.dataset.mid = m.id;
   row.appendChild(avatarEl(m.username, { size: 'md' }));
-
-  const body = el('div', 'body');
-  const head = el('div', 'head');
-  head.appendChild(el('span', 'author', m.username));
-  head.appendChild(el('span', 'time', formatTime(m.created_at)));
-  body.appendChild(head);
-  body.appendChild(el('div', 'text', m.content));
-  row.appendChild(body);
+  row.appendChild(el('div', 'body'));
+  fillMessageBody(row, m);
 
   box.appendChild(row);
   lastMsg = m;
@@ -322,7 +384,62 @@ function appendMessage(m, animate = true) {
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 200;
   if (!animate || nearBottom) scrollToBottom();
 }
+function rowFor(id) { return $('messages').querySelector(`.msg[data-mid="${id}"]`); }
 function scrollToBottom() { const b = $('messages'); b.scrollTop = b.scrollHeight; }
+
+/* ---- message actions ---- */
+async function toggleReaction(id, emoji) {
+  try { await api(`/messages/${id}/react`, { method: 'POST', body: { emoji } }); }
+  catch { /* ignore */ }
+}
+async function deleteMessage(id) {
+  if (!confirm('Удалить сообщение?')) return;
+  try { await api(`/messages/${id}`, { method: 'DELETE' }); }
+  catch (e) { alert(e.message); }
+}
+function startEdit(row, m) {
+  const body = row.querySelector('.body');
+  const existing = body.querySelector('.edit-box');
+  if (existing) return;
+  const box = el('div', 'edit-box');
+  const ta = el('textarea', 'edit-input');
+  ta.value = m.content;
+  box.appendChild(ta);
+  const hint = el('div', 'edit-hint', 'Enter — сохранить · Esc — отмена');
+  box.appendChild(hint);
+  const textEl = body.querySelector('.text');
+  textEl.style.display = 'none';
+  textEl.after(box);
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+  const cancel = () => { box.remove(); textEl.style.display = ''; };
+  ta.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const content = ta.value.trim();
+      if (!content) return;
+      try { await api(`/messages/${m.id}`, { method: 'PATCH', body: { content } }); cancel(); }
+      catch (err) { alert(err.message); }
+    }
+  });
+}
+
+/* ---- emoji picker popover ---- */
+let openPicker = null;
+function closeEmojiPicker() { if (openPicker) { openPicker.remove(); openPicker = null; } }
+function openEmojiPicker(row, messageId) {
+  closeEmojiPicker();
+  const pop = el('div', 'emoji-picker');
+  for (const e of REACTION_EMOJIS) {
+    const b = el('button', 'emoji-opt', e);
+    b.addEventListener('click', (ev) => { ev.stopPropagation(); toggleReaction(messageId, e); closeEmojiPicker(); });
+    pop.appendChild(b);
+  }
+  row.appendChild(pop);
+  openPicker = pop;
+  setTimeout(() => document.addEventListener('click', closeEmojiPicker, { once: true }), 0);
+}
 
 function sendCurrent() {
   const input = $('composer-input');
@@ -501,11 +618,35 @@ function sendWs(payload) {
 function handleWsEvent(msg) {
   switch (msg.type) {
     case 'message': appendMessage(msg.message); break;
+    case 'message_updated': handleMessageUpdated(msg.message); break;
+    case 'message_deleted': handleMessageDeleted(msg); break;
+    case 'reaction_updated': handleReactionUpdated(msg); break;
     case 'presence': setPresence(msg.user.id, msg.online); break;
     case 'member_joined': if (msg.server_id === state.currentServerId) loadMembers(msg.server_id); break;
     case 'channel_created': handleChannelCreated(msg); break;
     case 'typing': showTyping(msg); break;
   }
+}
+
+function handleMessageUpdated(upd) {
+  const m = msgById.get(upd.id);
+  if (!m) return;
+  m.content = upd.content;
+  m.edited_at = upd.edited_at;
+  const row = rowFor(upd.id);
+  if (row) fillMessageBody(row, m);
+}
+function handleMessageDeleted(msg) {
+  msgById.delete(msg.message_id);
+  const row = rowFor(msg.message_id);
+  if (row) row.remove();
+}
+function handleReactionUpdated(msg) {
+  const m = msgById.get(msg.message_id);
+  if (!m) return;
+  m.reactions = msg.reactions;
+  const row = rowFor(msg.message_id);
+  if (row) fillMessageBody(row, m);
 }
 function handleChannelCreated(msg) {
   const server = state.servers.find((s) => s.id === msg.server_id);

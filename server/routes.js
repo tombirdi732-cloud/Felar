@@ -181,6 +181,25 @@ router.post('/servers/:id/channels', authRequired, (req, res) => {
 
 /* --------------------------- Messages --------------------------- */
 
+// Aggregate reactions for a set of message ids -> { messageId: [{emoji,count,users}] }
+export function reactionsFor(messageIds) {
+  const map = {};
+  if (!messageIds.length) return map;
+  const placeholders = messageIds.map(() => '?').join(',');
+  const rows = db
+    .prepare(`SELECT message_id, emoji, user_id FROM reactions WHERE message_id IN (${placeholders})`)
+    .all(...messageIds);
+  for (const r of rows) {
+    (map[r.message_id] ||= {});
+    (map[r.message_id][r.emoji] ||= { emoji: r.emoji, count: 0, users: [] });
+    map[r.message_id][r.emoji].count++;
+    map[r.message_id][r.emoji].users.push(r.user_id);
+  }
+  const out = {};
+  for (const id of messageIds) out[id] = Object.values(map[id] || {});
+  return out;
+}
+
 // Message history for a channel (paginated backwards via `before` id).
 router.get('/channels/:id/messages', authRequired, (req, res) => {
   const channelId = Number(req.params.id);
@@ -194,14 +213,97 @@ router.get('/channels/:id/messages', authRequired, (req, res) => {
 
   const rows = db
     .prepare(
-      `SELECT m.id, m.content, m.created_at, m.user_id, u.username, u.avatar
+      `SELECT m.id, m.channel_id, m.content, m.created_at, m.edited_at, m.user_id, u.username, u.avatar
        FROM messages m JOIN users u ON u.id = m.user_id
        WHERE m.channel_id = ? AND m.id < ?
        ORDER BY m.id DESC LIMIT ?`
     )
     .all(channelId, before, limit);
 
+  const reacts = reactionsFor(rows.map((r) => r.id));
+  for (const r of rows) r.reactions = reacts[r.id] || [];
+
   res.json({ messages: rows.reverse() });
+});
+
+// Load a message together with its channel & server, checking membership.
+function loadMessageForUser(messageId, userId) {
+  const m = db
+    .prepare(
+      `SELECT m.*, c.server_id, s.owner_id
+       FROM messages m
+       JOIN channels c ON c.id = m.channel_id
+       JOIN servers s ON s.id = c.server_id
+       WHERE m.id = ?`
+    )
+    .get(messageId);
+  if (!m) return { error: 404 };
+  if (!assertMember(userId, m.server_id)) return { error: 403 };
+  return { message: m };
+}
+
+// Edit a message (author only).
+router.patch('/messages/:id', authRequired, (req, res) => {
+  const { message, error } = loadMessageForUser(Number(req.params.id), req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сообщение не найдено' : 'Нет доступа' });
+  if (message.user_id !== req.user.id)
+    return res.status(403).json({ error: 'Можно редактировать только свои сообщения' });
+
+  const content = String(req.body?.content || '').trim();
+  if (!content || content.length > 2000) return res.status(400).json({ error: 'Некорректный текст' });
+
+  const ts = now();
+  db.prepare('UPDATE messages SET content = ?, edited_at = ? WHERE id = ?').run(content, ts, message.id);
+  broadcastToServer(message.server_id, {
+    type: 'message_updated',
+    message: { id: message.id, channel_id: message.channel_id, content, edited_at: ts },
+  });
+  res.json({ ok: true });
+});
+
+// Delete a message (author or server owner).
+router.delete('/messages/:id', authRequired, (req, res) => {
+  const { message, error } = loadMessageForUser(Number(req.params.id), req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сообщение не найдено' : 'Нет доступа' });
+  if (message.user_id !== req.user.id && message.owner_id !== req.user.id)
+    return res.status(403).json({ error: 'Нет прав на удаление' });
+
+  db.prepare('DELETE FROM messages WHERE id = ?').run(message.id);
+  broadcastToServer(message.server_id, {
+    type: 'message_deleted',
+    message_id: message.id,
+    channel_id: message.channel_id,
+  });
+  res.json({ ok: true });
+});
+
+// Toggle the current user's reaction (emoji) on a message.
+router.post('/messages/:id/react', authRequired, (req, res) => {
+  const { message, error } = loadMessageForUser(Number(req.params.id), req.user.id);
+  if (error) return res.status(error).json({ error: error === 404 ? 'Сообщение не найдено' : 'Нет доступа' });
+
+  const emoji = String(req.body?.emoji || '').trim().slice(0, 8);
+  if (!emoji) return res.status(400).json({ error: 'Нет эмодзи' });
+
+  const existing = db
+    .prepare('SELECT 1 FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?')
+    .get(message.id, req.user.id, emoji);
+  if (existing) {
+    db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?')
+      .run(message.id, req.user.id, emoji);
+  } else {
+    db.prepare('INSERT INTO reactions (message_id, user_id, emoji, created_at) VALUES (?, ?, ?, ?)')
+      .run(message.id, req.user.id, emoji, now());
+  }
+
+  const reactions = reactionsFor([message.id])[message.id] || [];
+  broadcastToServer(message.server_id, {
+    type: 'reaction_updated',
+    message_id: message.id,
+    channel_id: message.channel_id,
+    reactions,
+  });
+  res.json({ reactions });
 });
 
 export default router;
