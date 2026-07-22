@@ -1,0 +1,38 @@
+name: Собрать приложение Roost (Windows)
+
+# Запускается вручную: вкладка Actions → этот workflow → Run workflow.
+# Собирает Windows-установщик и кладёт его в артефакты запуска (скачать -> раздать).
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows installer
+        run: npm run desktop:build
+        env:
+          # Don't attempt code-signing in CI.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Roost-Windows-Installer
+          path: |
+            dist-desktop/*.exe
+          if-no-files-found: error
