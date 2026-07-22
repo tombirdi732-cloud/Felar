@@ -5,6 +5,8 @@ name: Собрать приложение Roost (Windows)
 on:
   workflow_dispatch:
   push:
+    branches:
+      - claude/discord-like-messenger-qisejt
     tags:
       - 'v*'
 
