@@ -1,6 +1,8 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import crypto from 'crypto';
-import db from './db.js';
+import { writeFileSync } from 'fs';
+import { join, extname } from 'path';
+import db, { uploadsDir } from './db.js';
 import {
   hashPassword,
   verifyPassword,
@@ -54,6 +56,43 @@ router.post('/auth/login', (req, res) => {
 
 router.get('/me', authRequired, (req, res) => {
   res.json({ user: req.user });
+});
+
+// Update the current user's profile (currently: avatar URL).
+router.patch('/me', authRequired, (req, res) => {
+  if (req.body?.avatar !== undefined) {
+    const url = req.body.avatar === null ? null : String(req.body.avatar).slice(0, 300);
+    db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(url, req.user.id);
+  }
+  const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(req.user.id);
+  res.json({ user });
+});
+
+/* ----------------------------- Uploads ----------------------------- */
+
+const MAX_UPLOAD = 12 * 1024 * 1024; // 12 MB
+const rawUpload = express.raw({ type: () => true, limit: MAX_UPLOAD });
+
+function safeExt(name, type) {
+  let ext = extname(String(name || '')).toLowerCase().replace(/[^.a-z0-9]/g, '').slice(0, 10);
+  if (!ext) {
+    const map = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
+    ext = map[type] || '';
+  }
+  return ext;
+}
+
+// Upload a file (raw body). Returns a URL usable as an attachment or avatar.
+router.post('/upload', authRequired, rawUpload, (req, res) => {
+  const buf = req.body;
+  if (!buf || !buf.length) return res.status(400).json({ error: 'Пустой файл' });
+  if (buf.length > MAX_UPLOAD) return res.status(413).json({ error: 'Файл слишком большой (макс. 12 МБ)' });
+
+  const name = String(req.headers['x-filename'] ? decodeURIComponent(req.headers['x-filename']) : 'file').slice(0, 200);
+  const type = String(req.headers['content-type'] || 'application/octet-stream').slice(0, 100);
+  const fname = crypto.randomBytes(16).toString('hex') + safeExt(name, type);
+  writeFileSync(join(uploadsDir, fname), buf);
+  res.json({ url: '/uploads/' + fname, name, type, size: buf.length });
 });
 
 /* ---------------------------- Servers --------------------------- */
@@ -304,7 +343,8 @@ router.get('/channels/:id/messages', authRequired, (req, res) => {
 
   const rows = db
     .prepare(
-      `SELECT m.id, m.channel_id, m.content, m.created_at, m.edited_at, m.user_id, u.username, u.avatar
+      `SELECT m.id, m.channel_id, m.content, m.created_at, m.edited_at, m.user_id,
+              m.attachment_url, m.attachment_name, m.attachment_type, u.username, u.avatar
        FROM messages m JOIN users u ON u.id = m.user_id
        WHERE m.channel_id = ? AND m.id < ?
        ORDER BY m.id DESC LIMIT ?`
@@ -457,7 +497,8 @@ router.get('/dms/:id/messages', authRequired, (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 50, 100);
   const rows = db
     .prepare(
-      `SELECT m.id, m.thread_id, m.content, m.created_at, m.user_id, u.username, u.avatar
+      `SELECT m.id, m.thread_id, m.content, m.created_at, m.user_id,
+              m.attachment_url, m.attachment_name, m.attachment_type, u.username, u.avatar
        FROM dm_messages m JOIN users u ON u.id = m.user_id
        WHERE m.thread_id = ? AND m.id < ?
        ORDER BY m.id DESC LIMIT ?`

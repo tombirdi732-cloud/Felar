@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import routes from './routes.js';
 import { attachWebSocket } from './ws.js';
+import { uploadsDir } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -22,6 +23,9 @@ app.use((req, res, next) => {
 });
 
 app.use('/api', routes);
+
+// Serve uploaded files (avatars, attachments).
+app.use('/uploads', express.static(uploadsDir, { maxAge: '7d' }));
 
 // Serve the SPA.
 const publicDir = join(__dirname, '..', 'public');

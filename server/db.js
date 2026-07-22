@@ -11,6 +11,10 @@ const rawPath = process.env.ROOST_DB || 'roost.db';
 const dbPath = isAbsolute(rawPath) ? rawPath : join(__dirname, '..', rawPath);
 mkdirSync(dirname(dbPath), { recursive: true });
 
+// Uploaded files live next to the DB (same Docker volume) so they persist.
+export const uploadsDir = process.env.ROOST_UPLOADS || join(dirname(dbPath), 'uploads');
+mkdirSync(uploadsDir, { recursive: true });
+
 const db = new Database(dbPath);
 
 db.pragma('journal_mode = WAL');
@@ -54,7 +58,10 @@ db.exec(`
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content    TEXT    NOT NULL,
     created_at INTEGER NOT NULL,
-    edited_at  INTEGER
+    edited_at  INTEGER,
+    attachment_url  TEXT,
+    attachment_name TEXT,
+    attachment_type TEXT
   );
 
   CREATE TABLE IF NOT EXISTS reactions (
@@ -80,7 +87,10 @@ db.exec(`
     thread_id  INTEGER NOT NULL REFERENCES dm_threads(id) ON DELETE CASCADE,
     user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content    TEXT    NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    attachment_url  TEXT,
+    attachment_name TEXT,
+    attachment_type TEXT
   );
 
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id, id);
@@ -93,9 +103,17 @@ db.exec(`
 `);
 
 // --- lightweight migrations for databases created before these columns ---
-const messageCols = db.prepare("PRAGMA table_info(messages)").all().map((c) => c.name);
-if (!messageCols.includes('edited_at')) {
-  db.exec('ALTER TABLE messages ADD COLUMN edited_at INTEGER');
+function ensureColumn(table, col, type) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
 }
+ensureColumn('messages', 'edited_at', 'INTEGER');
+ensureColumn('messages', 'attachment_url', 'TEXT');
+ensureColumn('messages', 'attachment_name', 'TEXT');
+ensureColumn('messages', 'attachment_type', 'TEXT');
+ensureColumn('dm_messages', 'attachment_url', 'TEXT');
+ensureColumn('dm_messages', 'attachment_name', 'TEXT');
+ensureColumn('dm_messages', 'attachment_type', 'TEXT');
+ensureColumn('users', 'avatar', 'TEXT');
 
 export default db;

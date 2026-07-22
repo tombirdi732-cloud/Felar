@@ -2,6 +2,8 @@ node_modules/
 roost.db
 roost.db-shm
 roost.db-wal
+uploads/
+data/
 *.log
 .env
 .DS_Store

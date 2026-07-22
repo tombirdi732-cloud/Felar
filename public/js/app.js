@@ -48,16 +48,63 @@ function initials(name) {
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]);
   return String(name || '?').trim().slice(0, 2);
 }
-function avatarEl(name, { size = 'md', status } = {}) {
+// Resolve an uploaded-file URL against the configured server base.
+function fileSrc(url) {
+  if (!url) return '';
+  return (url.startsWith('/') ? getServerBase() : '') + url;
+}
+
+function avatarEl(name, { size = 'md', status, avatar } = {}) {
   const wrap = el('div', 'avatar ' + size);
-  const c = el('div', 'avatar-circle', initials(name));
-  c.style.backgroundColor = colorFor(name);
-  wrap.appendChild(c);
-  if (status) {
-    const d = el('span', 'dot ' + status);
-    wrap.appendChild(d);
+  const c = el('div', 'avatar-circle');
+  if (avatar) {
+    const img = document.createElement('img');
+    img.className = 'avatar-img';
+    img.src = fileSrc(avatar);
+    img.alt = '';
+    img.onerror = () => { img.remove(); c.textContent = initials(name); c.style.backgroundColor = colorFor(name); };
+    c.appendChild(img);
+  } else {
+    c.textContent = initials(name);
+    c.style.backgroundColor = colorFor(name);
   }
+  wrap.appendChild(c);
+  if (status) wrap.appendChild(el('span', 'dot ' + status));
   return wrap;
+}
+
+// Build an attachment element (image preview or file card) for a message.
+function attachmentEl(m) {
+  if (!m.attachment_url) return null;
+  const url = fileSrc(m.attachment_url);
+  if ((m.attachment_type || '').startsWith('image/')) {
+    const link = el('a', 'attach-img-link');
+    link.href = url; link.target = '_blank'; link.rel = 'noopener';
+    const img = document.createElement('img');
+    img.className = 'attach-img'; img.src = url; img.alt = m.attachment_name || '';
+    link.appendChild(img);
+    return link;
+  }
+  const card = el('a', 'attach-file');
+  card.href = url; card.target = '_blank'; card.rel = 'noopener'; card.download = m.attachment_name || 'file';
+  card.appendChild(icon('paperclip', 'ic'));
+  card.appendChild(el('span', 'attach-name', m.attachment_name || 'файл'));
+  return card;
+}
+
+// Upload a file via the raw upload endpoint.
+async function uploadFile(file) {
+  const res = await fetch(`${getServerBase()}/api/upload`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${state.token}`,
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Filename': encodeURIComponent(file.name || 'file'),
+    },
+    body: file,
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'Ошибка загрузки'); }
+  return res.json();
 }
 
 /* --------------------- server address --------------------- */
@@ -155,18 +202,39 @@ async function startApp() {
   $('app').classList.remove('hidden');
 
   $('me-name').textContent = state.user.username;
-  const meAv = avatarEl(state.user.username, { size: 'sm', status: 'online' });
-  meAv.id = 'me-avatar';
-  $('me-avatar').replaceWith(meAv);
-  $('nav-profile').innerHTML = '';
-  $('nav-profile').appendChild(avatarEl(state.user.username, { size: 'sm', status: 'online' }));
   $('me-name-dm').textContent = state.user.username;
-  const meAvDm = avatarEl(state.user.username, { size: 'sm', status: 'online' });
-  meAvDm.id = 'me-avatar-dm';
-  $('me-avatar-dm').replaceWith(meAvDm);
+  refreshMyAvatars();
 
   await loadServers();
   connectWebSocket();
+}
+
+// Re-render all avatars that represent the current user (after avatar change).
+function refreshMyAvatars() {
+  const opts = { size: 'sm', status: 'online', avatar: state.user.avatar };
+  const a1 = avatarEl(state.user.username, opts); a1.id = 'me-avatar'; $('me-avatar').replaceWith(a1);
+  const a2 = avatarEl(state.user.username, opts); a2.id = 'me-avatar-dm'; $('me-avatar-dm').replaceWith(a2);
+  $('nav-profile').innerHTML = '';
+  $('nav-profile').appendChild(avatarEl(state.user.username, opts));
+}
+
+// Pick and upload a new avatar image for the current user.
+function pickAvatar() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    try {
+      const up = await uploadFile(f);
+      const { user } = await api('/me', { method: 'PATCH', body: { avatar: up.url } });
+      state.user = user;
+      refreshMyAvatars();
+      if (state.view === 'settings') renderSettings();
+      if (state.view === 'profile') renderProfile();
+    } catch (e) { alert(e.message); }
+  };
+  inp.click();
 }
 
 async function loadServers() {
@@ -324,13 +392,14 @@ function fillMessageBody(row, m) {
   head.appendChild(el('span', 'time', formatTime(m.created_at)));
   body.appendChild(head);
 
-  const textWrap = el('div', 'text');
-  textWrap.appendChild(document.createTextNode(m.content));
-  if (m.edited_at) {
-    const ed = el('span', 'edited', ' (изменено)');
-    textWrap.appendChild(ed);
+  if (m.content) {
+    const textWrap = el('div', 'text');
+    textWrap.appendChild(document.createTextNode(m.content));
+    if (m.edited_at) textWrap.appendChild(el('span', 'edited', ' (изменено)'));
+    body.appendChild(textWrap);
   }
-  body.appendChild(textWrap);
+  const att = attachmentEl(m);
+  if (att) body.appendChild(att);
 
   // reactions
   if (m.reactions && m.reactions.length) {
@@ -381,7 +450,7 @@ function appendMessage(m, animate = true) {
   const grouped = lastMsg && lastMsg.user_id === m.user_id && m.created_at - lastMsg.created_at < 5 * 60 * 1000;
   const row = el('div', 'msg' + (grouped ? ' grouped' : ''));
   row.dataset.mid = m.id;
-  row.appendChild(avatarEl(m.username, { size: 'md' }));
+  row.appendChild(avatarEl(m.username, { size: 'md', avatar: m.avatar }));
   row.appendChild(el('div', 'body'));
   fillMessageBody(row, m);
 
@@ -461,6 +530,32 @@ $('composer-input').addEventListener('keydown', (e) => {
 });
 $('send-btn').addEventListener('click', sendCurrent);
 
+// Attach + send a file (kind: 'channel' | 'dm').
+function pickAndSendFile(kind) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    try {
+      const up = await uploadFile(f);
+      const attachment = { url: up.url, name: up.name, type: up.type };
+      if (kind === 'dm') {
+        if (!state.currentDmId) return;
+        sendWs({ type: 'dm_message', thread_id: state.currentDmId, content: $('dm-input').value.trim(), attachment });
+        $('dm-input').value = '';
+      } else {
+        if (!state.currentChannelId) return;
+        sendWs({ type: 'message', channel_id: state.currentChannelId, content: $('composer-input').value.trim(), attachment });
+        $('composer-input').value = '';
+      }
+    } catch (e) { alert(e.message); }
+  };
+  inp.click();
+}
+$('chat-attach').addEventListener('click', () => pickAndSendFile('channel'));
+$('dm-attach').addEventListener('click', () => pickAndSendFile('dm'));
+
 /* ------------------- members ------------------- */
 async function loadMembers(serverId) {
   try {
@@ -482,7 +577,7 @@ function renderMembers() {
     box.appendChild(el('div', 'members-heading', `${title} — ${list.length}`));
     for (const m of list) {
       const row = el('div', 'member' + (isOnline ? '' : ' offline'));
-      row.appendChild(avatarEl(m.username, { size: 'sm', status: isOnline ? 'online' : 'offline' }));
+      row.appendChild(avatarEl(m.username, { size: 'sm', status: isOnline ? 'online' : 'offline', avatar: m.avatar }));
       const info = el('div');
       info.style.minWidth = '0';
       info.appendChild(el('div', 'm-name', m.username));
@@ -533,7 +628,7 @@ function renderProfile() {
   $('profile-name').textContent = state.user.username;
   $('profile-handle').textContent = state.user.username.toLowerCase().replace(/\s+/g, '.');
   $('stat-servers').textContent = state.servers.length;
-  const av = avatarEl(state.user.username, { size: 'xl', status: 'online' });
+  const av = avatarEl(state.user.username, { size: 'xl', status: 'online', avatar: state.user.avatar });
   av.id = 'profile-avatar';
   $('profile-avatar').replaceWith(av);
 }
@@ -572,11 +667,14 @@ function renderSettings() {
     c.appendChild(el('h2', null, 'Аккаунт'));
     const card = el('div', 'card');
     card.style.display = 'flex'; card.style.alignItems = 'center'; card.style.gap = '16px';
-    card.appendChild(avatarEl(state.user.username, { size: 'lg', status: 'online' }));
-    const info = el('div');
+    card.appendChild(avatarEl(state.user.username, { size: 'lg', status: 'online', avatar: state.user.avatar }));
+    const info = el('div'); info.style.flex = '1';
     info.appendChild(el('div', 's-title', state.user.username));
     info.appendChild(el('div', 's-desc', '@' + state.user.username.toLowerCase().replace(/\s+/g, '.')));
     card.appendChild(info);
+    const avBtn = el('button', 'btn-mini', 'Изменить аватар');
+    avBtn.addEventListener('click', pickAvatar);
+    card.appendChild(avBtn);
     block.appendChild(card);
     const note = el('p', 's-desc');
     note.style.marginTop = '16px';
@@ -785,7 +883,7 @@ function openServerSettings() {
     body.appendChild(el('div', 'field-label', 'Участники'));
     for (const m of state.members) {
       const row = el('div', 'ss-row');
-      row.appendChild(avatarEl(m.username, { size: 'sm' }));
+      row.appendChild(avatarEl(m.username, { size: 'sm', avatar: m.avatar }));
       row.appendChild(el('span', 'ss-member-name', m.username + (m.id === server.owner_id ? ' · владелец' : '')));
       if (m.id !== server.owner_id) {
         const kick = el('button', 'btn-mini danger', 'Кик');
@@ -897,7 +995,7 @@ function renderDmList() {
   }
   for (const th of state.dmThreads) {
     const row = el('button', 'dm-item' + (th.id === state.currentDmId ? ' active' : ''));
-    row.appendChild(avatarEl(th.other.username, { size: 'sm', status: th.other.online ? 'online' : 'offline' }));
+    row.appendChild(avatarEl(th.other.username, { size: 'sm', status: th.other.online ? 'online' : 'offline', avatar: th.other.avatar }));
     const info = el('div', 'dm-item-info');
     info.appendChild(el('div', 'dm-item-name', th.other.username));
     info.appendChild(el('div', 'dm-item-preview', th.preview || 'нет сообщений'));
@@ -926,7 +1024,7 @@ async function openDm(thread) {
 
   $('dm-peer-name').textContent = thread.other.username;
   $('dm-peer-status').textContent = thread.other.online ? 'В сети' : 'Не в сети';
-  const av = avatarEl(thread.other.username, { size: 'sm', status: thread.other.online ? 'online' : 'offline' });
+  const av = avatarEl(thread.other.username, { size: 'sm', status: thread.other.online ? 'online' : 'offline', avatar: thread.other.avatar });
   av.id = 'dm-peer-avatar';
   $('dm-peer-avatar').replaceWith(av);
   $('dm-input').disabled = false;
@@ -955,13 +1053,15 @@ function appendDmMessage(m, animate = true) {
 
   const grouped = lastDmMsg && lastDmMsg.user_id === m.user_id && m.created_at - lastDmMsg.created_at < 5 * 60 * 1000;
   const row = el('div', 'msg' + (grouped ? ' grouped' : ''));
-  row.appendChild(avatarEl(m.username, { size: 'md' }));
+  row.appendChild(avatarEl(m.username, { size: 'md', avatar: m.avatar }));
   const body = el('div', 'body');
   const head = el('div', 'head');
   head.appendChild(el('span', 'author', m.username));
   head.appendChild(el('span', 'time', formatTime(m.created_at)));
   body.appendChild(head);
-  body.appendChild(el('div', 'text', m.content));
+  if (m.content) body.appendChild(el('div', 'text', m.content));
+  const att = attachmentEl(m);
+  if (att) body.appendChild(att);
   row.appendChild(body);
   box.appendChild(row);
   lastDmMsg = m;

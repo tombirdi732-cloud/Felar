@@ -10,6 +10,19 @@ import {
 
 const now = () => Date.now();
 
+// Validate an attachment descriptor sent by a client. Only files that were
+// uploaded through /api/upload (served under /uploads/) are accepted.
+function parseAttachment(a) {
+  if (!a || typeof a !== 'object') return null;
+  const url = String(a.url || '');
+  if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(url)) return null;
+  return {
+    url: url.slice(0, 300),
+    name: String(a.name || 'файл').slice(0, 200),
+    type: String(a.type || '').slice(0, 100),
+  };
+}
+
 // Notify every server the user belongs to about a presence change.
 function broadcastPresence(userId, online) {
   const servers = db
@@ -37,7 +50,8 @@ function handleMessage(ws, raw) {
   if (msg.type === 'message') {
     const channelId = Number(msg.channel_id);
     const content = String(msg.content || '').trim();
-    if (!channelId || !content) return;
+    const att = parseAttachment(msg.attachment);
+    if (!channelId || (!content && !att)) return;
     if (content.length > 2000) return;
 
     const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId);
@@ -50,8 +64,8 @@ function handleMessage(ws, raw) {
 
     const ts = now();
     const info = db
-      .prepare('INSERT INTO messages (channel_id, user_id, content, created_at) VALUES (?, ?, ?, ?)')
-      .run(channelId, ws.userId, content, ts);
+      .prepare('INSERT INTO messages (channel_id, user_id, content, created_at, attachment_url, attachment_name, attachment_type) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(channelId, ws.userId, content, ts, att?.url || null, att?.name || null, att?.type || null);
 
     const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(ws.userId);
     const payload = {
@@ -66,6 +80,9 @@ function handleMessage(ws, raw) {
         username: user.username,
         avatar: user.avatar,
         reactions: [],
+        attachment_url: att?.url || null,
+        attachment_name: att?.name || null,
+        attachment_type: att?.type || null,
       },
     };
     // Deliver to all members of the server (including sender, for confirmation).
@@ -89,15 +106,16 @@ function handleMessage(ws, raw) {
   if (msg.type === 'dm_message') {
     const threadId = Number(msg.thread_id);
     const content = String(msg.content || '').trim();
-    if (!threadId || !content || content.length > 2000) return;
+    const att = parseAttachment(msg.attachment);
+    if (!threadId || (!content && !att) || content.length > 2000) return;
 
     const thread = db.prepare('SELECT * FROM dm_threads WHERE id = ?').get(threadId);
     if (!thread || (thread.user_lo !== ws.userId && thread.user_hi !== ws.userId)) return;
 
     const ts = now();
     const info = db
-      .prepare('INSERT INTO dm_messages (thread_id, user_id, content, created_at) VALUES (?, ?, ?, ?)')
-      .run(threadId, ws.userId, content, ts);
+      .prepare('INSERT INTO dm_messages (thread_id, user_id, content, created_at, attachment_url, attachment_name, attachment_type) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(threadId, ws.userId, content, ts, att?.url || null, att?.name || null, att?.type || null);
     db.prepare('UPDATE dm_threads SET last_at = ? WHERE id = ?').run(ts, threadId);
 
     const user = db.prepare('SELECT id, username, avatar FROM users WHERE id = ?').get(ws.userId);
@@ -111,6 +129,9 @@ function handleMessage(ws, raw) {
         user_id: user.id,
         username: user.username,
         avatar: user.avatar,
+        attachment_url: att?.url || null,
+        attachment_name: att?.name || null,
+        attachment_type: att?.type || null,
       },
     };
     sendToUser(thread.user_lo, payload);
