@@ -48,28 +48,27 @@
 
   <!-- ===================== Main app ===================== -->
   <div id="app" class="app hidden">
-    <!-- Server rail -->
-    <nav class="rail" id="rail">
-      <div class="rail-item home active" id="rail-home" title="Личное пространство">
-        <span>F</span>
-      </div>
-      <div class="rail-sep"></div>
-      <div id="server-list"></div>
-      <div class="rail-item add" id="rail-add" title="Добавить сервер">+</div>
-    </nav>
-
-    <!-- Channels sidebar -->
-    <aside class="sidebar">
-      <header class="sidebar-header" id="server-header">
-        <span id="server-name">Выберите сервер</span>
-        <span class="chevron">⌄</span>
+    <!-- Unified navigation: servers expand into their channels (tree). -->
+    <aside class="nav">
+      <header class="nav-brand" id="nav-home" title="Личное пространство">
+        <img src="/assets/icons/logo.png" alt="Felar" class="nav-brand-img"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='inline'" />
+        <span class="nav-brand-text" style="display:none">Felar</span>
       </header>
-      <div class="channel-list" id="channel-list"></div>
+
+      <div class="nav-tree" id="nav-tree"></div>
+
+      <div class="nav-actions">
+        <button class="nav-action-btn" id="add-server-btn">
+          <span class="plus">+</span> Добавить сервер
+        </button>
+      </div>
+
       <footer class="user-bar">
         <div class="avatar" id="me-avatar"></div>
         <div class="user-bar-info">
           <div class="user-bar-name" id="me-name">—</div>
-          <div class="user-bar-status">В сети</div>
+          <div class="user-bar-status"><span class="me-dot"></span>В сети</div>
         </div>
         <button class="icon-btn" id="logout-btn" title="Выйти">⏻</button>
       </footer>

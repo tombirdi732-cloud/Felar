@@ -144,95 +144,124 @@ async function startApp() {
 async function loadServers() {
   const { servers } = await api('/servers');
   state.servers = servers;
-  renderServerRail();
+  renderTree();
 
   if (servers.length && !state.currentServerId) {
     selectServer(servers[0].id);
-  } else if (!servers.length) {
-    $('server-name').textContent = 'Нет серверов';
   }
 }
 
-/* ------------------- server rail ------------------- */
-function renderServerRail() {
-  const list = $('server-list');
-  list.innerHTML = '';
+/* ------------- navigation tree (servers → channels) ------------- */
+function renderTree() {
+  const tree = $('nav-tree');
+  tree.innerHTML = '';
+
+  if (!state.servers.length) {
+    const empty = el('div', 'tree-empty');
+    empty.style.cssText = 'padding:20px 12px;color:var(--text-muted);font-size:13px;line-height:1.5';
+    empty.textContent = 'Пока нет серверов. Создай первый кнопкой ниже или войди по коду приглашения.';
+    tree.appendChild(empty);
+    return;
+  }
+
   for (const s of state.servers) {
-    const item = el('div', 'rail-item', initials(s.name));
-    item.title = s.name;
-    if (s.id === state.currentServerId) item.classList.add('active');
-    item.addEventListener('click', () => selectServer(s.id));
-    list.appendChild(item);
+    const isActive = s.id === state.currentServerId;
+    const block = el('div', 'tree-server' + (isActive ? ' expanded active-server' : ''));
+
+    const head = el('div', 'tree-server-head');
+    head.appendChild(el('span', 'tree-caret', '▸'));
+    head.appendChild(el('div', 'server-avatar', initials(s.name)));
+    head.appendChild(el('span', 'tree-server-name', s.name));
+    if (s.owner_id === state.user.id) {
+      const add = el('span', 'tree-add-channel', '+');
+      add.title = 'Создать канал';
+      add.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.currentServerId = s.id;
+        openChannelModal();
+      });
+      head.appendChild(add);
+    }
+    head.addEventListener('click', () => toggleServer(s.id));
+    block.appendChild(head);
+
+    if (isActive) {
+      const chans = el('div', 'tree-channels');
+      for (const ch of s.channels) {
+        const item = el('div', 'channel' + (ch.id === state.currentChannelId ? ' active' : ''));
+        item.appendChild(el('span', 'hash', '#'));
+        item.appendChild(el('span', null, ch.name));
+        item.addEventListener('click', () => selectChannel(ch.id));
+        chans.appendChild(item);
+      }
+
+      const inv = el('div', 'tree-invite');
+      inv.appendChild(el('span', null, 'Инвайт:'));
+      inv.appendChild(el('span', 'code', s.invite_code));
+      const copy = el('span', 'copy', '⧉');
+      copy.title = 'Скопировать код';
+      copy.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(s.invite_code);
+        copy.textContent = '✓';
+        setTimeout(() => (copy.textContent = '⧉'), 1200);
+      });
+      inv.appendChild(copy);
+      chans.appendChild(inv);
+
+      block.appendChild(chans);
+    }
+
+    tree.appendChild(block);
   }
 }
 
-async function selectServer(serverId) {
+// Collapse if the clicked server is already open, otherwise open it.
+function toggleServer(serverId) {
+  if (state.currentServerId === serverId) {
+    state.currentServerId = null;
+    state.currentChannelId = null;
+    renderTree();
+    resetChat();
+    return;
+  }
+  selectServer(serverId);
+}
+
+function selectServer(serverId) {
   state.currentServerId = serverId;
   const server = state.servers.find((s) => s.id === serverId);
   if (!server) return;
 
-  renderServerRail();
-  $('rail-home').classList.remove('active');
-  $('server-name').textContent = server.name;
-
-  renderChannels(server);
+  renderTree();
   loadMembers(serverId);
 
-  // Auto-select first channel.
   if (server.channels.length) {
     selectChannel(server.channels[0].id);
   } else {
     state.currentChannelId = null;
-    $('messages').innerHTML = '';
-    $('channel-name').textContent = '—';
+    resetChat();
   }
+}
+
+// Reset chat area to the welcome state (no channel selected).
+function resetChat() {
+  $('messages').innerHTML =
+    '<div class="empty-hint"><h2>Добро пожаловать в Felar</h2>' +
+    '<p>Выберите канал слева, чтобы начать общение.</p></div>';
+  $('channel-name').textContent = '—';
+  $('composer-input').disabled = true;
+  $('members-list').innerHTML = '';
 }
 
 /* ------------------- channels ------------------- */
-function renderChannels(server) {
-  const list = $('channel-list');
-  list.innerHTML = '';
-
-  const cat = el('div', 'channel-category');
-  cat.appendChild(el('span', null, 'Текстовые каналы'));
-  if (server.owner_id === state.user.id) {
-    const add = el('span', 'add-channel', '+');
-    add.title = 'Создать канал';
-    add.addEventListener('click', () => openChannelModal());
-    cat.appendChild(add);
-  }
-  list.appendChild(cat);
-
-  for (const ch of server.channels) {
-    const item = el('div', 'channel');
-    if (ch.id === state.currentChannelId) item.classList.add('active');
-    item.appendChild(el('span', 'hash', '#'));
-    item.appendChild(el('span', null, ch.name));
-    item.addEventListener('click', () => selectChannel(ch.id));
-    list.appendChild(item);
-  }
-
-  // Invite code hint
-  const invite = el('div', 'channel-category');
-  invite.appendChild(el('span', null, `Код: ${server.invite_code}`));
-  const copy = el('span', 'add-channel', '⧉');
-  copy.title = 'Скопировать код';
-  copy.addEventListener('click', () => {
-    navigator.clipboard?.writeText(server.invite_code);
-    copy.textContent = '✓';
-    setTimeout(() => (copy.textContent = '⧉'), 1200);
-  });
-  invite.appendChild(copy);
-  list.appendChild(invite);
-}
-
 async function selectChannel(channelId) {
   state.currentChannelId = channelId;
   const server = state.servers.find((s) => s.id === state.currentServerId);
   const channel = server?.channels.find((c) => c.id === channelId);
   if (!channel) return;
 
-  renderChannels(server);
+  renderTree();
   $('channel-name').textContent = channel.name;
   $('composer-input').disabled = false;
   $('composer-input').placeholder = `Написать в #${channel.name}`;
@@ -401,7 +430,7 @@ function handleChannelCreated(msg) {
   if (!server) return;
   if (!server.channels.find((c) => c.id === msg.channel.id)) {
     server.channels.push(msg.channel);
-    if (msg.server_id === state.currentServerId) renderChannels(server);
+    if (msg.server_id === state.currentServerId) renderTree();
   }
 }
 
@@ -417,7 +446,7 @@ function showTyping(msg) {
 }
 
 /* ======================= Modals ======================= */
-$('rail-add').addEventListener('click', () => $('modal-overlay').classList.remove('hidden'));
+$('add-server-btn').addEventListener('click', () => $('modal-overlay').classList.remove('hidden'));
 $('modal-close').addEventListener('click', () => $('modal-overlay').classList.add('hidden'));
 $('modal-overlay').addEventListener('click', (e) => {
   if (e.target === $('modal-overlay')) $('modal-overlay').classList.add('hidden');
@@ -442,7 +471,7 @@ $('create-server-btn').addEventListener('click', async () => {
     state.servers.push(server);
     $('new-server-name').value = '';
     $('modal-overlay').classList.add('hidden');
-    renderServerRail();
+    renderTree();
     selectServer(server.id);
   } catch (err) {
     $('modal-error').textContent = err.message;
@@ -456,7 +485,7 @@ $('join-server-btn').addEventListener('click', async () => {
     if (!state.servers.find((s) => s.id === server.id)) state.servers.push(server);
     $('join-code').value = '';
     $('modal-overlay').classList.add('hidden');
-    renderServerRail();
+    renderTree();
     selectServer(server.id);
   } catch (err) {
     $('modal-error').textContent = err.message;
@@ -487,27 +516,19 @@ $('create-channel-btn').addEventListener('click', async () => {
     }
     $('new-channel-name').value = '';
     $('channel-modal-overlay').classList.add('hidden');
-    renderChannels(server);
+    renderTree();
     selectChannel(channel.id);
   } catch (err) {
     $('channel-modal-error').textContent = err.message;
   }
 });
 
-/* home button */
-$('rail-home').addEventListener('click', () => {
-  $('rail-home').classList.add('active');
+/* brand / home button — collapse everything back to the welcome screen */
+$('nav-home').addEventListener('click', () => {
   state.currentServerId = null;
   state.currentChannelId = null;
-  renderServerRail();
-  $('server-name').textContent = 'Личное пространство';
-  $('channel-list').innerHTML = '';
-  $('messages').innerHTML =
-    '<div class="empty-hint"><h2>Добро пожаловать в Felar</h2>' +
-    '<p>Выберите сервер слева или создайте новый.</p></div>';
-  $('channel-name').textContent = '—';
-  $('composer-input').disabled = true;
-  $('members-list').innerHTML = '';
+  renderTree();
+  resetChat();
 });
 
 /* ======================= Bootstrap ======================= */
