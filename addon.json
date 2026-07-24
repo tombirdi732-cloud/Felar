@@ -1,0 +1,10 @@
+{
+	"title": "SCP-2983 «ИНЕЙ»",
+	"type": "gamemode_content",
+	"tags": [ "roleplay", "fun" ],
+	"ignore": [
+		"*.md",
+		".git/*",
+		".github/*"
+	]
+}
