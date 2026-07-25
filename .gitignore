@@ -1,0 +1,28 @@
+# Каталоги, которые Unreal генерирует сам
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vscode/
+.vs/
+.idea/
+
+# Файлы проектов IDE
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+
+# Сборки
+Build/
+!Build/*/**/*.ini
+
+# Ассеты Unreal — бинарные. Если начнёшь их коммитить, обязательно включи Git LFS,
+# иначе репозиторий распухнет за пару недель и станет невозможно смержить.
+# Раскомментируй и настрой .gitattributes, когда дойдёшь до этого:
+# *.uasset filter=lfs diff=lfs merge=lfs -text
+# *.umap   filter=lfs diff=lfs merge=lfs -text
