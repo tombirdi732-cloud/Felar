@@ -144,6 +144,32 @@ def render_note(role, pitch, dur, rng):
         m = voiced * env
         return np.stack([m, m])
 
+    if role == "reese":
+        # Мид-бас/гроул: расстроенные пилы -> биения между голосами, потом
+        # воббл фильтром и дисторшн. Это и даёт клубный «рык».
+        n = int((dur + 0.12) * SR)
+        f = np.full(n, freq)
+        raw = np.zeros(n)
+        for k in (-1.0, -0.35, 0.35, 1.0):
+            raw += saw(f * (1.0 + 0.011 * k), n, phase=rng.random())
+        raw /= 2.0
+
+        # воббл: LFO гоняет частоту среза, период привязан к длине ноты
+        t = np.arange(n) / SR
+        lfo_hz = max(4.0, min(14.0, 2.2 / max(dur, 0.08)))
+        lfo = 0.5 + 0.5 * np.sin(2 * np.pi * lfo_hz * t - np.pi / 2)
+        cutoff = 260 * (1 - lfo) + 2600 * lfo
+        sig = sweep_lowpass(np.stack([raw, raw]), cutoff, blocksize=512)[0]
+
+        sig = np.tanh(sig * 3.2) * 0.72        # дисторшн: добавляет гармоники
+        sig = _hp(sig, 85)                     # снизу место для суба
+        env = adsr(n, a=0.004, d=0.10, s=0.80, r=0.10)
+        sig *= env
+        # низ держим в моно, верх слегка разводим — как в клубном миксе
+        low = _lp(sig, 240)
+        high = sig - low
+        return np.stack([low + high * 0.85, low + high * 1.15])
+
     if role == "sub":
         n = int((dur + 0.10) * SR)
         t = np.arange(n) / SR
@@ -269,14 +295,15 @@ def delay(bus, time_s, feedback=0.34, mix=0.26):
 
 # роль -> (громкость, реверб, дилей в долях такта)
 MIX = {
-    "chords": (0.62, 0.30, None),
-    "lead":   (0.50, 0.26, 0.75),
-    "pluck":  (0.30, 0.22, 0.375),
-    "chops":  (0.26, 0.30, 0.75),
-    "sub":    (0.85, 0.00, None),
+    "chords": (0.52, 0.30, None),
+    "lead":   (0.46, 0.26, 0.75),
+    "pluck":  (0.26, 0.22, 0.375),
+    "chops":  (0.22, 0.30, 0.75),
+    "reese":  (0.62, 0.05, None),      # мид-бас громкий, но почти сухой
+    "sub":    (0.80, 0.00, None),
     "drums":  (0.80, 0.06, None),
 }
-DUCKED = ("chords", "lead", "pluck", "chops", "sub")
+DUCKED = ("chords", "lead", "pluck", "chops", "reese", "sub")
 
 
 def cutoff_curve(n, bpm):
@@ -343,11 +370,12 @@ def render(parts, bpm, seconds=None):
         elif role == "lead":
             bus = sweep_lowpass(bus, np.maximum(curve, 3000))
         if role == "sub":
-            bus = np.stack([_lp(c, 120) for c in bus])       # суб строго снизу
+            bus = np.stack([_lp(c, 110) for c in bus])       # суб строго снизу
         if dly:
             bus = delay(bus, dly * spb)
         if role in DUCKED:
-            depth = 0.85 if role == "sub" else 0.72
+            # бас душим сильнее — иначе бочка в него утыкается
+            depth = {"sub": 0.88, "reese": 0.80}.get(role, 0.72)
             bus = sidechain(bus, kick_times, n, depth=depth)
         if rev:
             bus = reverb(bus, amount=rev, rng=rng)
@@ -400,15 +428,16 @@ def write_mp3(path, audio, bitrate=192):
 
 def main():
     ap = argparse.ArgumentParser(description="Рендер EDM-аранжировки в звук")
-    ap.add_argument("--bpm", type=int, default=generate_edm.DEFAULT_BPM)
+    ap.add_argument("--style", default="future", choices=sorted(generate_edm.STYLES))
+    ap.add_argument("--bpm", type=int, default=None)
     ap.add_argument("--key", default=generate_edm.DEFAULT_KEY)
     ap.add_argument("--seconds", type=float, default=None, help="обрезать превью")
     ap.add_argument("--out", default="demo.mp3")
     args = ap.parse_args()
 
-    parts, _markers, bars = generate_edm.build_song(args.bpm, args.key)
-    print(f"Рендерю {args.key} {args.bpm} BPM, {bars} тактов...")
-    audio = render(parts, args.bpm, args.seconds)
+    parts, _markers, bars, bpm = generate_edm.build_song(args.bpm, args.key, args.style)
+    print(f"Рендерю {args.style}: {args.key} {bpm} BPM, {bars} тактов...")
+    audio = render(parts, bpm, args.seconds)
     if args.out.endswith(".mp3"):
         out = write_mp3(args.out, audio)
     else:

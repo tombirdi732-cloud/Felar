@@ -4,19 +4,42 @@
 Зависимостей для MIDI не нужно — только Python 3. Для рендера в звук
 нужны `numpy`, `scipy` и `lameenc`.
 
-## EDM / future bass (стиль Marshmello)
+## Клубный EDM
+
+Три стиля, у каждого свой темп, басовый рисунок и барабаны:
+
+| `--style` | Темп | Что это | Бас в дропе | Бочка |
+|---|---|---|---|---|
+| `future` | 150 | Future bass (Marshmello) | по стабам аккордов | half-time |
+| `bass` | 140 | Тяжёлый dubstep-дроп | рваный гроул с прыжками | half-time |
+| `house` | 128 | Bass house / клубный | офбит между бочками | в пол |
 
 ```bash
-python3 generate_edm.py                   # marshmello_style.mid
-python3 generate_edm.py --key Am --bpm 145
-python3 generate_edm.py --guide           # какие синты вешать в FL
-python3 render_audio.py --out demo.mp3    # послушать до открытия FL
-python3 render_audio.py --seconds 45      # быстрое превью
+python3 generate_edm.py                      # future bass, 150 BPM
+python3 generate_edm.py --style bass         # тяжёлый гроул-дроп
+python3 generate_edm.py --style house        # bass house
+python3 generate_edm.py --key Am --bpm 145   # любая тональность и темп
+python3 generate_edm.py --guide              # какие синты вешать в FL
+
+python3 render_audio.py --style house        # послушать до открытия FL
+python3 render_audio.py --seconds 45         # быстрое превью
 ```
 
 Структура: Intro → Verse → Build → **Drop** → Breakdown → Verse → Build →
-**Drop** → Outro, 88 тактов (~2:20). Шесть дорожек: аккорды супер-пилой,
-лид, пluck-арпеджио, вокал-чопы, суб-бас и барабаны.
+**Drop** → Outro, 88 тактов (~2:20–2:45).
+
+### Бас разложен на три слоя
+
+Так делают в клубной музыке, чтобы низ читался и на телефоне, и на большой
+системе — один широкополосный бас всегда превращается в кашу:
+
+- **Sub Bass 808** — чистый синус, 35–52 Гц. Только фундамент, строго моно.
+- **Reese / Growl Bass** — расстроенные пилы, 69–208 Гц, воббл фильтром и
+  дисторшн. Это весь «рык», главный слой дропа.
+- **Supersaw Chords** — от 250 Гц и выше, низ им обрезан.
+
+Диапазоны не пересекаются: reese режется снизу на 85 Гц, суб сверху на
+110 Гц. Оба сайдчейнятся от бочки.
 
 ## Гитарная песня «Я ведь не свят»
 
