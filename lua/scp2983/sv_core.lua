@@ -26,6 +26,12 @@ function SCP2983.Make( ply )
 		ply:SetModel( C.PlayerModel )
 	end
 
+	-- Руки от первого лица
+	local hands = ply:GetHands()
+	if IsValid( hands ) and C.Hands and util.IsValidModel( C.Hands ) then
+		hands:SetModel( C.Hands )
+	end
+
 	ply:StripWeapons()
 	ply:Give( C.HandsWeapon )
 	ply:SelectWeapon( C.HandsWeapon )
@@ -49,6 +55,13 @@ function SCP2983.Remove( ply )
 
 	hook.Run( "SCP2983_Removed", ply )
 end
+
+-- Руки ИНЕЯ при спавне (если игрок ресается уже будучи SCP)
+hook.Add( "PlayerSetHandsModel", "SCP2983_Hands", function( ply, ent )
+	if SCP2983.IsSCP( ply ) and C.Hands and util.IsValidModel( C.Hands ) then
+		ent:SetModel( C.Hands )
+	end
+end )
 
 --------------------------------------------------------------------------------
 -- Клиент присылает уровень освещённости у своих глаз (для «тёмных зон»)

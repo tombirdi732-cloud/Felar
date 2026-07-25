@@ -13,7 +13,8 @@ local C = SCP2983.Config
 --------------------------------------------------------------------------------
 -- ОБЩЕЕ
 --------------------------------------------------------------------------------
-C.PlayerModel   = "models/player/charple.mdl"      -- временная модель; замени на воркшоп-модель ИНЕЯ
+C.PlayerModel   = "models/dizcordum/YuriaOfLondor.mdl"        -- модель ИНЕЯ
+C.Hands         = "models/dizcordum/YuriaOfLondor_hands.mdl"  -- руки от первого лица
 C.HandsWeapon   = "scp2983_hands"                   -- SWEP-«руки» ИНЕЯ (ледяной удар)
 C.MaxHealth     = 2000                              -- HP самого SCP
 C.WalkSpeed     = 240
@@ -163,15 +164,13 @@ C.Weakness = {
 	},
 	ThermalAbsorb = 40,       -- сколько стаков гасит костюм
 
-	-- Зажигательное оружие: двойной урон по SCP + обнуление ядра.
-	IncendiaryWeapons = {
-		-- ["weapon_incendiary"] = true,
-	},
-	IncendiaryDamageMul = 2.0,
+	-- (Зажигательные патроны убраны — сдерживание идёт через огнемёт.)
+	IncendiaryWeapons = {},
+	IncendiaryDamageMul = 2.0,     -- множитель урона по SCP от огнемёта
 
-	-- Огнемёт — оружие класса «сдерживание».
+	-- Огнемёт — оружие класса «сдерживание»: x2 урон по SCP + обнуление ядра.
 	FlamethrowerWeapons = {
-		-- ["weapon_flamethrower"] = true,
+		["scp2983_flamethrower"] = true,   -- наш встроенный огнемёт (см. lua/weapons)
 	},
 }
 
