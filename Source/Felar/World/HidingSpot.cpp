@@ -6,6 +6,8 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Engine/StaticMesh.h"
 
 AHidingSpot::AHidingSpot()
 {
@@ -13,18 +15,36 @@ AHidingSpot::AHidingSpot()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 
+	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+	SetRootComponent(Root);
+
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	SetRootComponent(Mesh);
+	Mesh->SetupAttachment(Root);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Mesh->SetCollisionResponseToAllChannels(ECR_Block);
 
-	HidePoint = CreateDefaultSubobject<USceneComponent>(TEXT("HidePoint"));
-	HidePoint->SetupAttachment(Mesh);
-	HidePoint->SetRelativeLocation(FVector(0.f, 0.f, 20.f));
+	// Заглушка размером со шкаф: 80 x 120 x 220 см, низом на полу.
+	// Меняется на свою модель в любой момент, но играть можно сразу.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(
+		TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMesh.Succeeded())
+	{
+		Mesh->SetStaticMesh(CubeMesh.Object);
+		Mesh->SetRelativeScale3D(FVector(0.8f, 1.2f, 2.2f));
+		Mesh->SetRelativeLocation(FVector(0.f, 0.f, 110.f));
+	}
 
+	// Z = 90: капсула игрока имеет полувысоту 88, поэтому в нуле она уходила бы
+	// наполовину под пол.
+	HidePoint = CreateDefaultSubobject<USceneComponent>(TEXT("HidePoint"));
+	HidePoint->SetupAttachment(Root);
+	HidePoint->SetRelativeLocation(FVector(0.f, 0.f, 90.f));
+
+	// Заведомо снаружи меша: внутри игрок оказался бы замурован после
+	// включения коллизии на выходе.
 	ExitPoint = CreateDefaultSubobject<USceneComponent>(TEXT("ExitPoint"));
-	ExitPoint->SetupAttachment(Mesh);
-	ExitPoint->SetRelativeLocation(FVector(120.f, 0.f, 20.f));
+	ExitPoint->SetupAttachment(Root);
+	ExitPoint->SetRelativeLocation(FVector(110.f, 0.f, 90.f));
 }
 
 void AHidingSpot::Tick(float DeltaTime)

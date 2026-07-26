@@ -41,6 +41,14 @@ public:
 	void OnOccupiedChangedBP(bool bOccupied);
 
 protected:
+	/**
+	 * Корень, к которому крепится всё остальное. Нужен именно отдельный:
+	 * если сделать корнем меш, его масштаб растянет и точки входа/выхода,
+	 * и игрок при выходе окажется в случайном месте.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Hiding")
+	TObjectPtr<USceneComponent> Root;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Hiding")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 

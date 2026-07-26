@@ -6,7 +6,10 @@
 
 #include "Components/CapsuleComponent.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Engine/StaticMesh.h"
 
 AStalkerCharacter::AStalkerCharacter()
 {
@@ -23,6 +26,21 @@ AStalkerCharacter::AStalkerCharacter()
 	CatchSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	CatchSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	CatchSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+
+	// Видимое тело-заглушка: без него существо — невидимая капсула, и понять,
+	// работает ли ИИ, невозможно. Коллизии нет, чтобы не мешать капсуле.
+	PlaceholderMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlaceholderMesh"));
+	PlaceholderMesh->SetupAttachment(GetCapsuleComponent());
+	PlaceholderMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(
+		TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	if (CylinderMesh.Succeeded())
+	{
+		PlaceholderMesh->SetStaticMesh(CylinderMesh.Object);
+		// Под капсулу 42 x 96: диаметр 84 см, высота 192 см.
+		PlaceholderMesh->SetRelativeScale3D(FVector(0.84f, 0.84f, 1.92f));
+	}
 
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->MaxWalkSpeed = PatrolSpeed;

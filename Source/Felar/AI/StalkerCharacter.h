@@ -6,6 +6,7 @@
 #include "StalkerCharacter.generated.h"
 
 class USphereComponent;
+class UStaticMeshComponent;
 class AFelarCharacter;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnStalkerStateChanged, EStalkerState, OldState, EStalkerState, NewState);
@@ -72,6 +73,14 @@ protected:
 	/** Радиус, в котором существо хватает игрока. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Stalker")
 	TObjectPtr<USphereComponent> CatchSphere;
+
+	/**
+	 * Временное тело, чтобы существо было видно до появления своей модели.
+	 * Когда назначишь скелетный меш на компонент Mesh, этот просто скрой
+	 * или удали — на логику он не влияет вообще.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Stalker")
+	TObjectPtr<UStaticMeshComponent> PlaceholderMesh;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|Stalker|Movement", meta = (ClampMin = "1.0"))
 	float PatrolSpeed = 180.f;

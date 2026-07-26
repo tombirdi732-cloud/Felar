@@ -8,6 +8,8 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Engine/StaticMesh.h"
 
 APickupActor::APickupActor()
 {
@@ -74,6 +76,17 @@ AFragmentPickup::AFragmentPickup()
 	PickupPrompt = NSLOCTEXT("Felar", "PickupFragment", "Забрать фрагмент");
 	FearRelief = 12.f;
 	Glow->SetLightColor(FLinearColor(0.4f, 0.8f, 1.f));
+
+	// Встроенная модель движка вместо пустого меша. Без неё предмет не только
+	// невидим — он ещё и не ловит луч взаимодействия, то есть подобрать его
+	// невозможно. Заменяется на свою модель в любой момент.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(
+		TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	if (SphereMesh.Succeeded())
+	{
+		Mesh->SetStaticMesh(SphereMesh.Object);
+		Mesh->SetRelativeScale3D(FVector(0.25f));
+	}
 }
 
 void AFragmentPickup::OnCollected(AFelarCharacter* Collector)
@@ -95,6 +108,15 @@ ABatteryPickup::ABatteryPickup()
 	PickupPrompt = NSLOCTEXT("Felar", "PickupBattery", "Взять батарею");
 	FearRelief = 5.f;
 	Glow->SetLightColor(FLinearColor(1.f, 0.85f, 0.4f));
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(
+		TEXT("/Engine/BasicShapes/Cube.Cube"));
+	if (CubeMesh.Succeeded())
+	{
+		Mesh->SetStaticMesh(CubeMesh.Object);
+		// Вытянутый брусок — форма батарейки читается даже на заглушке.
+		Mesh->SetRelativeScale3D(FVector(0.1f, 0.1f, 0.26f));
+	}
 }
 
 void ABatteryPickup::OnCollected(AFelarCharacter* Collector)
