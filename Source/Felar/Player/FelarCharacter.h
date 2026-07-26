@@ -2,8 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "InputActionValue.h"
 #include "Core/FelarTypes.h"
 #include "FelarCharacter.generated.h"
+
+class UInputAction;
+class UInputMappingContext;
 
 class UVHSCameraComponent;
 class USpotLightComponent;
@@ -157,17 +161,70 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|Fear", meta = (ClampMin = "100.0"))
 	float StalkerVisionRange = 3000.f;
 
-	// --- Обработчики ввода ---
+	// --- Ввод (Enhanced Input) ---
 
-	void MoveForward(float Value);
-	void MoveRight(float Value);
-	void TurnAt(float Value);
-	void LookUpAt(float Value);
-	void StartSprint();
-	void StopSprint();
-	void ToggleCrouch();
-	void OnInteractPressed();
-	void OnFlashlightPressed();
+	/**
+	 * Схема управления. Создаётся целиком в конструкторе, а не загружается из
+	 * ассетов: Input Action и Mapping Context — бинарные файлы, и проект,
+	 * зависящий от них, не собрался бы «из коробки». Переназначить клавиши
+	 * можно, переопределив BuildInputMappings в наследнике.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputMappingContext> InputMapping;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_MoveForward;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_MoveRight;
+
+	/** Мышь. Даёт готовую дельту за кадр — домножать на DeltaTime не нужно. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_Look;
+
+	/**
+	 * Стик геймпада. Отдельным действием от мыши: стик отдаёт положение (-1..1),
+	 * а не дельту, поэтому его надо умножать на время кадра. В одном действии
+	 * с мышью одно из двух устройств обязательно вело бы себя неправильно.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_LookGamepad;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_Sprint;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_Crouch;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_Interact;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Input")
+	TObjectPtr<UInputAction> IA_Flashlight;
+
+	/** Приоритет схемы в подсистеме ввода. Меню поверх игры добавляют выше. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|Input")
+	int32 InputMappingPriority = 0;
+
+	/** Чувствительность мыши. Множитель к сырому вводу. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|Input", meta = (ClampMin = "0.01"))
+	float LookSensitivity = 1.f;
+
+	/** Скорость обзора с геймпада, градусов в секунду. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|Input", meta = (ClampMin = "1.0"))
+	float GamepadLookSpeed = 130.f;
+
+	// --- Обработчики ---
+
+	void HandleMoveForward(const FInputActionValue& Value);
+	void HandleMoveRight(const FInputActionValue& Value);
+	void HandleLook(const FInputActionValue& Value);
+	void HandleLookGamepad(const FInputActionValue& Value);
+	void HandleSprintStarted();
+	void HandleSprintCompleted();
+	void HandleCrouchPressed();
+	void HandleInteractPressed();
+	void HandleFlashlightPressed();
 
 	/** Игрок ахнул от страха — переводим это в шум для ИИ. */
 	UFUNCTION()
@@ -176,6 +233,12 @@ protected:
 	/** Срыв: существо узнаёт точную позицию. */
 	UFUNCTION()
 	void HandleFearBreakdown();
+
+	/** Собрать схему управления. Переопредели, чтобы поменять раскладку. */
+	virtual void BuildInputMappings();
+
+	/** Зарегистрировать схему в подсистеме ввода игрока. */
+	void RegisterInputMapping();
 
 private:
 	void TickStamina(float DeltaTime);

@@ -16,6 +16,13 @@
 #include "Kismet/GameplayStatics.h"
 #include "Perception/AISense_Hearing.h"
 
+#include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
+#include "InputAction.h"
+#include "InputMappingContext.h"
+#include "InputModifiers.h"
+
 AFelarCharacter::AFelarCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -51,6 +58,70 @@ AFelarCharacter::AFelarCharacter()
 	// От первого лица персонаж поворачивается вместе с камерой, а не отдельно.
 	Movement->bOrientRotationToMovement = false;
 	bUseControllerRotationYaw = true;
+
+	BuildInputMappings();
+}
+
+void AFelarCharacter::BuildInputMappings()
+{
+	// Всё создаётся как default subobject, а не через NewObject: конструктор
+	// исполняется в том числе для CDO, где NewObject использовать нельзя.
+	IA_MoveForward = CreateDefaultSubobject<UInputAction>(TEXT("IA_MoveForward"));
+	IA_MoveForward->ValueType = EInputActionValueType::Axis1D;
+
+	IA_MoveRight = CreateDefaultSubobject<UInputAction>(TEXT("IA_MoveRight"));
+	IA_MoveRight->ValueType = EInputActionValueType::Axis1D;
+
+	IA_Look = CreateDefaultSubobject<UInputAction>(TEXT("IA_Look"));
+	IA_Look->ValueType = EInputActionValueType::Axis2D;
+
+	IA_LookGamepad = CreateDefaultSubobject<UInputAction>(TEXT("IA_LookGamepad"));
+	IA_LookGamepad->ValueType = EInputActionValueType::Axis2D;
+
+	IA_Sprint = CreateDefaultSubobject<UInputAction>(TEXT("IA_Sprint"));
+	IA_Sprint->ValueType = EInputActionValueType::Boolean;
+
+	IA_Crouch = CreateDefaultSubobject<UInputAction>(TEXT("IA_Crouch"));
+	IA_Crouch->ValueType = EInputActionValueType::Boolean;
+
+	IA_Interact = CreateDefaultSubobject<UInputAction>(TEXT("IA_Interact"));
+	IA_Interact->ValueType = EInputActionValueType::Boolean;
+
+	IA_Flashlight = CreateDefaultSubobject<UInputAction>(TEXT("IA_Flashlight"));
+	IA_Flashlight->ValueType = EInputActionValueType::Boolean;
+
+	// Клавиша сама по себе даёт только +1, поэтому «назад» и «влево» получаются
+	// тем же действием с модификатором отрицания.
+	UInputModifierNegate* NegateBack = CreateDefaultSubobject<UInputModifierNegate>(TEXT("NegateBack"));
+	UInputModifierNegate* NegateLeft = CreateDefaultSubobject<UInputModifierNegate>(TEXT("NegateLeft"));
+
+	InputMapping = CreateDefaultSubobject<UInputMappingContext>(TEXT("IMC_Felar"));
+
+	InputMapping->MapKey(IA_MoveForward, EKeys::W);
+	InputMapping->MapKey(IA_MoveForward, EKeys::Up);
+	InputMapping->MapKey(IA_MoveForward, EKeys::S).Modifiers.Add(NegateBack);
+	InputMapping->MapKey(IA_MoveForward, EKeys::Down).Modifiers.Add(NegateBack);
+	InputMapping->MapKey(IA_MoveForward, EKeys::Gamepad_LeftY);
+
+	InputMapping->MapKey(IA_MoveRight, EKeys::D);
+	InputMapping->MapKey(IA_MoveRight, EKeys::A).Modifiers.Add(NegateLeft);
+	InputMapping->MapKey(IA_MoveRight, EKeys::Gamepad_LeftX);
+
+	InputMapping->MapKey(IA_Look, EKeys::Mouse2D);
+	InputMapping->MapKey(IA_LookGamepad, EKeys::Gamepad_Right2D);
+
+	InputMapping->MapKey(IA_Sprint, EKeys::LeftShift);
+	InputMapping->MapKey(IA_Sprint, EKeys::Gamepad_LeftThumbstick);
+
+	InputMapping->MapKey(IA_Crouch, EKeys::C);
+	InputMapping->MapKey(IA_Crouch, EKeys::LeftControl);
+	InputMapping->MapKey(IA_Crouch, EKeys::Gamepad_RightThumbstick);
+
+	InputMapping->MapKey(IA_Interact, EKeys::E);
+	InputMapping->MapKey(IA_Interact, EKeys::Gamepad_FaceButton_Bottom);
+
+	InputMapping->MapKey(IA_Flashlight, EKeys::F);
+	InputMapping->MapKey(IA_Flashlight, EKeys::Gamepad_FaceButton_Left);
 }
 
 void AFelarCharacter::BeginPlay()
@@ -91,67 +162,107 @@ void AFelarCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// Классический (legacy) ввод: имена осей и действий заданы в Config/DefaultInput.ini.
-	// Это сделано намеренно — .ini является текстовым файлом, в отличие от ассетов
-	// Enhanced Input, поэтому проект собирается без ручной настройки в редакторе.
-	PlayerInputComponent->BindAxis("MoveForward", this, &AFelarCharacter::MoveForward);
-	PlayerInputComponent->BindAxis("MoveRight", this, &AFelarCharacter::MoveRight);
-	PlayerInputComponent->BindAxis("Turn", this, &AFelarCharacter::TurnAt);
-	PlayerInputComponent->BindAxis("LookUp", this, &AFelarCharacter::LookUpAt);
+	RegisterInputMapping();
 
-	PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &AFelarCharacter::StartSprint);
-	PlayerInputComponent->BindAction("Sprint", IE_Released, this, &AFelarCharacter::StopSprint);
-	PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &AFelarCharacter::ToggleCrouch);
-	PlayerInputComponent->BindAction("Interact", IE_Pressed, this, &AFelarCharacter::OnInteractPressed);
-	PlayerInputComponent->BindAction("Flashlight", IE_Pressed, this, &AFelarCharacter::OnFlashlightPressed);
+	UEnhancedInputComponent* Input = Cast<UEnhancedInputComponent>(PlayerInputComponent);
+	if (!Input)
+	{
+		UE_LOG(LogFelar, Error,
+			TEXT("Expected UEnhancedInputComponent. Check DefaultInputComponentClass in DefaultInput.ini"));
+		return;
+	}
+
+	// Triggered, а не Started: движение и обзор должны обновляться каждый кадр,
+	// пока клавиша удерживается, а не один раз в момент нажатия.
+	Input->BindAction(IA_MoveForward, ETriggerEvent::Triggered, this, &AFelarCharacter::HandleMoveForward);
+	Input->BindAction(IA_MoveRight, ETriggerEvent::Triggered, this, &AFelarCharacter::HandleMoveRight);
+	Input->BindAction(IA_Look, ETriggerEvent::Triggered, this, &AFelarCharacter::HandleLook);
+	Input->BindAction(IA_LookGamepad, ETriggerEvent::Triggered, this, &AFelarCharacter::HandleLookGamepad);
+
+	Input->BindAction(IA_Sprint, ETriggerEvent::Started, this, &AFelarCharacter::HandleSprintStarted);
+	Input->BindAction(IA_Sprint, ETriggerEvent::Completed, this, &AFelarCharacter::HandleSprintCompleted);
+	Input->BindAction(IA_Crouch, ETriggerEvent::Started, this, &AFelarCharacter::HandleCrouchPressed);
+	Input->BindAction(IA_Interact, ETriggerEvent::Started, this, &AFelarCharacter::HandleInteractPressed);
+	Input->BindAction(IA_Flashlight, ETriggerEvent::Started, this, &AFelarCharacter::HandleFlashlightPressed);
+}
+
+void AFelarCharacter::RegisterInputMapping()
+{
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!PC || !InputMapping)
+	{
+		return;
+	}
+
+	UEnhancedInputLocalPlayerSubsystem* Subsystem =
+		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer());
+
+	if (!Subsystem)
+	{
+		UE_LOG(LogFelar, Error, TEXT("EnhancedInput subsystem not available"));
+		return;
+	}
+
+	Subsystem->AddMappingContext(InputMapping, InputMappingPriority);
 }
 
 // --- Ввод ---
 
-void AFelarCharacter::MoveForward(float Value)
+void AFelarCharacter::HandleMoveForward(const FInputActionValue& Value)
 {
 	// В укрытии игрок не двигается: выйти можно только повторным нажатием E.
-	if (Value == 0.f || !bAlive || IsHiding())
+	const float Scale = Value.Get<float>();
+	if (Scale == 0.f || !bAlive || IsHiding())
 	{
 		return;
 	}
 
-	AddMovementInput(FRotationMatrix(GetControlRotation()).GetScaledAxis(EAxis::X), Value);
+	AddMovementInput(FRotationMatrix(GetControlRotation()).GetScaledAxis(EAxis::X), Scale);
 }
 
-void AFelarCharacter::MoveRight(float Value)
+void AFelarCharacter::HandleMoveRight(const FInputActionValue& Value)
 {
-	if (Value == 0.f || !bAlive || IsHiding())
+	const float Scale = Value.Get<float>();
+	if (Scale == 0.f || !bAlive || IsHiding())
 	{
 		return;
 	}
 
-	AddMovementInput(FRotationMatrix(GetControlRotation()).GetScaledAxis(EAxis::Y), Value);
+	AddMovementInput(FRotationMatrix(GetControlRotation()).GetScaledAxis(EAxis::Y), Scale);
 }
 
-void AFelarCharacter::TurnAt(float Value)
+void AFelarCharacter::HandleLook(const FInputActionValue& Value)
 {
-	AddControllerYawInput(Value);
+	const FVector2D Look = Value.Get<FVector2D>();
+
+	AddControllerYawInput(Look.X * LookSensitivity);
+	// Мышь вверх даёт положительный Y, а положительный pitch наклоняет взгляд
+	// вниз — отсюда минус.
+	AddControllerPitchInput(-Look.Y * LookSensitivity);
 }
 
-void AFelarCharacter::LookUpAt(float Value)
+void AFelarCharacter::HandleLookGamepad(const FInputActionValue& Value)
 {
-	AddControllerPitchInput(Value);
+	const FVector2D Look = Value.Get<FVector2D>();
+	const float Delta = GetWorld()->GetDeltaSeconds() * GamepadLookSpeed;
+
+	AddControllerYawInput(Look.X * Delta);
+	AddControllerPitchInput(-Look.Y * Delta);
 }
 
-void AFelarCharacter::StartSprint()
+void AFelarCharacter::HandleSprintStarted()
 {
 	bWantsToSprint = true;
 	UpdateMaxSpeed();
 }
 
-void AFelarCharacter::StopSprint()
+void AFelarCharacter::HandleSprintCompleted()
 {
 	bWantsToSprint = false;
 	UpdateMaxSpeed();
 }
 
-void AFelarCharacter::ToggleCrouch()
+void AFelarCharacter::HandleCrouchPressed()
 {
 	if (IsHiding())
 	{
@@ -172,7 +283,7 @@ void AFelarCharacter::ToggleCrouch()
 	UpdateMaxSpeed();
 }
 
-void AFelarCharacter::OnInteractPressed()
+void AFelarCharacter::HandleInteractPressed()
 {
 	if (!bAlive)
 	{
@@ -193,7 +304,7 @@ void AFelarCharacter::OnInteractPressed()
 	}
 }
 
-void AFelarCharacter::OnFlashlightPressed()
+void AFelarCharacter::HandleFlashlightPressed()
 {
 	if (!bAlive)
 	{

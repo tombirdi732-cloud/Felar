@@ -12,6 +12,7 @@ public class Felar : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
+			"EnhancedInput",
 			"AIModule",
 			"GameplayTasks",
 			"NavigationSystem",
