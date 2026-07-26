@@ -1,4 +1,4 @@
-# FELAR
+# DARKROOM
 
 Хоррор от первого лица на Unreal Engine 5 в эстетике found footage: игрок смотрит на мир
 через видоискатель старого камкордера. Весь геймплей — на C++, классы спроектированы так,
@@ -46,14 +46,14 @@
 Порядок действий:
 
 1. Распакуй архив в папку без кириллицы и пробелов в пути.
-   Хорошо: `D:\Games\Felar`. Плохо: `C:\Мои проекты\хоррор игра`.
-2. Правый клик по `Felar.uproject` → **Generate Visual Studio project files**.
+   Хорошо: `D:\Games\Darkroom`. Плохо: `C:\Мои проекты\хоррор игра`.
+2. Правый клик по `Darkroom.uproject` → **Generate Visual Studio project files**.
    (На Linux/macOS — соответствующий скрипт генерации из папки движка.)
-3. Открой появившийся `Felar.sln`, выбери конфигурацию **Development Editor**,
+3. Открой появившийся `Darkroom.sln`, выбери конфигурацию **Development Editor**,
    собери (`Build → Build Solution`). Первая сборка идёт 5–20 минут.
-4. Открой `Felar.uproject` — запустится редактор Unreal.
+4. Открой `Darkroom.uproject` — запустится редактор Unreal.
 
-Можно и проще: просто дважды кликнуть `Felar.uproject`. Редактор увидит несобранный
+Можно и проще: просто дважды кликнуть `Darkroom.uproject`. Редактор увидит несобранный
 модуль и предложит скомпилировать сам. Но если сборка упадёт, ошибку будет видно
 хуже, чем в Visual Studio.
 
@@ -111,7 +111,7 @@
 каждому тег `PatrolPoint` (Details → Actor → Tags). Если точек нет, существо будет
 бродить случайно — работает, но маршрут получается менее осмысленным.
 
-**Режим игры:** в **World Settings** выстави `GameMode Override` → `FelarGameMode`.
+**Режим игры:** в **World Settings** выстави `GameMode Override` → `DarkroomGameMode`.
 
 > **Важно про `HidingSpot`:** если заменишь заглушку на свою модель шкафа, проверь,
 > что `ExitPoint` остался **снаружи** меша. Если он внутри, игрок при выходе окажется
@@ -131,7 +131,7 @@
 | `ExitDoor` | Меш двери, анимация в `OnDoorOpenedBP` |
 | `StalkerCharacter` | Скелетный меш + Anim Blueprint, звуки в `OnStateChangedBP` |
 | `NightAtmosphere` | Свои пресеты ночи под разные локации |
-| `FelarPlayerController` | `HUDWidgetClass`, если добавишь UMG-меню |
+| `DarkroomPlayerController` | `HUDWidgetClass`, если добавишь UMG-меню |
 
 Логику в них писать не нужно — она вся в C++. Blueprint здесь только держит модель,
 звук и числа.
@@ -153,8 +153,8 @@ HUDWidgetClass`. Подписаться можно на любое из этих
 - `UFlashlightComponent::OnBatteryChanged`, `OnBatteryDepleted`
 - `UFearComponent::OnFearChanged`, `OnPanicStateChanged`, `OnFearBreakdown`
 - `UInteractionComponent::OnFocusedActorChanged`
-- `AFelarGameState::OnFragmentsChanged`, `OnGameFinished`
-- `AFelarCharacter::OnPlayerCaught`, `OnStaminaChanged`, `OnHidingStateChanged`
+- `ADarkroomGameState::OnFragmentsChanged`, `OnGameFinished`
+- `ADarkroomCharacter::OnPlayerCaught`, `OnStaminaChanged`, `OnHidingStateChanged`
 
 ---
 
@@ -173,7 +173,7 @@ HUDWidgetClass`. Подписаться можно на любое из этих
 **3. Сбои плёнки.** Раз в 9–28 секунд кадр на четверть секунды «ведёт»: подскакивают
 аберрации, картинку кренит. Плюс ручные срабатывания в ключевых моментах.
 
-**Связь со страхом.** `FelarCharacter` каждый кадр отдаёт уровень страха в камеру.
+**Связь со страхом.** `DarkroomCharacter` каждый кадр отдаёт уровень страха в камеру.
 Чем страшнее — тем сильнее и мельче дрожь и тем чаще срывается плёнка. Состояние
 персонажа читается прямо с картинки, без единого элемента интерфейса. При срыве
 страха и при смерти запускается длинный сбой записи.
@@ -247,14 +247,14 @@ HUDWidgetClass`. Подписаться можно на любое из этих
 ## Архитектура
 
 ```
-Source/Felar/
+Source/Darkroom/
 ├── Core/
-│   ├── FelarTypes.h            Общие enum'ы: шум, состояние ИИ, исход партии
-│   ├── FelarGameMode.*         Правила: счётчик фрагментов, конец игры, рестарт
-│   ├── FelarGameState.*        Наблюдаемые данные для UI
-│   └── FelarPlayerController.* Режим ввода и создание UMG-виджета
+│   ├── DarkroomTypes.h            Общие enum'ы: шум, состояние ИИ, исход партии
+│   ├── DarkroomGameMode.*         Правила: счётчик фрагментов, конец игры, рестарт
+│   ├── DarkroomGameState.*        Наблюдаемые данные для UI
+│   └── DarkroomPlayerController.* Режим ввода и создание UMG-виджета
 ├── Player/
-│   ├── FelarCharacter.*        Камера, ввод, шум. Связывает компоненты между собой
+│   ├── DarkroomCharacter.*        Камера, ввод, шум. Связывает компоненты между собой
 │   ├── FlashlightComponent.*   Свет и батарея
 │   ├── FearComponent.*         Страх, паника, срыв
 │   └── InteractionComponent.*  Луч из камеры, поиск интерактивных объектов
@@ -265,7 +265,7 @@ Source/Felar/
 │   ├── StalkerCharacter.*      Тело существа, скорости, зона захвата
 │   └── StalkerAIController.*   Автомат состояний + восприятие
 └── World/
-    ├── FelarInteractable.h     Интерфейс взаимодействия
+    ├── DarkroomInteractable.h     Интерфейс взаимодействия
     ├── PickupActor.*           База подбираемых + фрагмент и батарея
     ├── HidingSpot.*            Шкаф
     ├── ExitDoor.*              Выход
@@ -277,9 +277,9 @@ Source/Felar/
 
 **Компоненты, а не один жирный класс персонажа.** Фонарь, страх и взаимодействие —
 три независимых `ActorComponent`. Каждый можно тестировать, отключать и вешать на
-другого актора отдельно. `FelarCharacter` только связывает их и переводит ввод в события.
+другого актора отдельно. `DarkroomCharacter` только связывает их и переводит ввод в события.
 
-**Интерфейс вместо Cast.** `IFelarInteractable` даёт игроку работать с дверью, шкафом и
+**Интерфейс вместо Cast.** `IDarkroomInteractable` даёт игроку работать с дверью, шкафом и
 запиской одинаково, без `Cast To BP_Door` на каждый тип. Каждый `Cast` в Blueprint тянет
 весь целевой класс со всеми его ассетами в память при загрузке — на большом проекте это
 превращается в минуты загрузки.
@@ -287,7 +287,7 @@ Source/Felar/
 **Делегаты вместо прямых ссылок.** Компоненты не знают ни про UI, ни друг про друга:
 они рассылают события, а подписчики сами решают, что с ними делать. Поэтому
 `FearComponent` понятия не имеет о существовании существа — шум из его событий делает
-`FelarCharacter`.
+`DarkroomCharacter`.
 
 **Конечный автомат на C++ вместо Behavior Tree.** BT и Blackboard — бинарные ассеты:
 их нельзя положить в архив как текст, нельзя нормально отревьюить и нельзя смержить,
@@ -340,7 +340,7 @@ Source/Felar/
 ## Отладка
 
 ```
-Log LogFelar Verbose      # подробный лог: состояния ИИ, шум, страх
+Log LogDarkroom Verbose      # подробный лог: состояния ИИ, шум, страх
 ShowDebug AI              # состояние ИИ поверх экрана
 show Navigation           # навмеш прямо в игре
 stat unit                 # общая производительность
