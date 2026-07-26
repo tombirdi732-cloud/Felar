@@ -370,7 +370,46 @@ void AFelarCharacter::TickFootsteps(float DeltaTime)
 	}
 
 	DistanceSinceStep = 0.f;
-	EmitNoise(GetCurrentMovementNoise());
+
+	const ENoiseLevel Noise = GetCurrentMovementNoise();
+	EmitNoise(Noise);
+
+	// Толчок камеры в тот же момент, что и шум: игрок видит и слышит один шаг,
+	// а не два несинхронных события.
+	float ImpulseStrength = 1.f;
+	switch (Noise)
+	{
+	case ENoiseLevel::Silent:	ImpulseStrength = 0.4f;	break;
+	case ENoiseLevel::Quiet:	ImpulseStrength = 1.f;	break;
+	default:					ImpulseStrength = 1.6f;	break;
+	}
+
+	Camera->AddStepImpulse(ImpulseStrength);
+}
+
+void AFelarCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+
+	if (!bAlive)
+	{
+		return;
+	}
+
+	// Сила приземления берётся из скорости падения: спрыгнуть со ступеньки
+	// и рухнуть с высоты должны ощущаться и звучать по-разному.
+	const float FallSpeed = FMath::Abs(GetVelocity().Z);
+	const float Alpha = FMath::Clamp(FallSpeed / 900.f, 0.f, 1.f);
+
+	Camera->AddStepImpulse(FMath::Lerp(1.2f, 4.f, Alpha));
+
+	// Тихое приземление слышно как обычный шаг, тяжёлое — на всю комнату.
+	EmitNoise(Alpha > 0.5f ? ENoiseLevel::Loud : ENoiseLevel::Quiet);
+
+	// Сбрасываем накопленный путь, иначе сразу после посадки сработает
+	// лишний шаг от расстояния, пройденного в полёте.
+	DistanceSinceStep = 0.f;
+	LastStepLocation = GetActorLocation();
 }
 
 void AFelarCharacter::TickStalkerVisibility(float DeltaTime)

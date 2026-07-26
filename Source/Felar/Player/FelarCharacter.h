@@ -40,6 +40,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void Landed(const FHitResult& Hit) override;
 
 	/** Издать шум, который может услышать существо. Единая точка для всех источников. */
 	UFUNCTION(BlueprintCallable, Category = "Felar|Noise")

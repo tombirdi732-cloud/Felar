@@ -48,6 +48,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Felar|VHS")
 	void TriggerGlitch(float Duration = 0.25f);
 
+	/**
+	 * Толчок камеры от шага или приземления.
+	 * Strength = 1 соответствует обычному шагу, приземление даёт 2.5–4.
+	 *
+	 * Именно этот короткий провал вниз в момент контакта с полом читается как
+	 * «человек идёт». Плавного шума для этого недостаточно: он ощущается как
+	 * камера на штативе в чужих руках, а не как походка.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Felar|VHS")
+	void AddStepImpulse(float Strength = 1.f);
+
 	UFUNCTION(BlueprintPure, Category = "Felar|VHS")
 	bool IsGlitching() const { return GlitchTimeLeft > 0.f; }
 
@@ -118,6 +129,24 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|VHS|Handheld", meta = (ClampMin = "1.0"))
 	float FullSwaySpeedThreshold = 550.f;
 
+	// --- Шаги ---
+
+	/** На сколько сантиметров проседает камера на обычном шаге. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|VHS|Step", meta = (ClampMin = "0.0"))
+	float StepImpulseStrength = 22.f;
+
+	/** Боковой снос шага. Ноги ставятся поочерёдно, поэтому знак чередуется. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|VHS|Step", meta = (ClampMin = "0.0"))
+	float StepLateralRatio = 0.45f;
+
+	/** Жёсткость пружины возврата. Выше — камера отскакивает резче. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|VHS|Step", meta = (ClampMin = "1.0"))
+	float StepSpringStiffness = 190.f;
+
+	/** Затухание. Слишком мало — камера начнёт болтаться как на пружине. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|VHS|Step", meta = (ClampMin = "0.1"))
+	float StepSpringDamping = 14.f;
+
 	// --- Сбои плёнки ---
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Felar|VHS|Glitch", meta = (ClampMin = "1.0"))
@@ -140,6 +169,7 @@ protected:
 private:
 	void TickSway(float DeltaTime);
 	void TickGlitch(float DeltaTime);
+	void TickStepSpring(float DeltaTime);
 	void ScheduleNextGlitch();
 
 	/** Множитель тряски от скорости движения владельца. */
@@ -155,6 +185,13 @@ private:
 
 	FRotator SwayRotation = FRotator::ZeroRotator;
 	FVector SwayOffset = FVector::ZeroVector;
+
+	/** Смещение и скорость пружины шага: Y — боковой снос, Z — просадка. */
+	FVector2D StepOffset = FVector2D::ZeroVector;
+	FVector2D StepVelocity = FVector2D::ZeroVector;
+
+	/** Знак бокового сноса. Меняется на каждом шаге — левая нога, правая нога. */
+	float StepLateralSign = 1.f;
 
 	bool bVHSEnabled = true;
 };

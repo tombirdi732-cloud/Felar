@@ -35,7 +35,41 @@ void UVHSCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	}
 
 	TickSway(DeltaTime);
+	TickStepSpring(DeltaTime);
 	TickGlitch(DeltaTime);
+}
+
+void UVHSCameraComponent::AddStepImpulse(float Strength)
+{
+	if (Strength <= 0.f)
+	{
+		return;
+	}
+
+	// Вниз по Z и вбок по Y. Знак бокового сноса чередуется, поэтому походка
+	// получается «левая-правая», а не одинаковым качком в одну сторону.
+	StepVelocity.Y += StepImpulseStrength * Strength * StepLateralRatio * StepLateralSign;
+	StepVelocity.X -= StepImpulseStrength * Strength;
+
+	StepLateralSign = -StepLateralSign;
+}
+
+void UVHSCameraComponent::TickStepSpring(float DeltaTime)
+{
+	// Пружина с затуханием: толчок гасится сам, отдельные таймеры не нужны,
+	// а наложение двух шагов подряд складывается естественно.
+	const FVector2D Acceleration =
+		-StepOffset * StepSpringStiffness - StepVelocity * StepSpringDamping;
+
+	StepVelocity += Acceleration * DeltaTime;
+	StepOffset += StepVelocity * DeltaTime;
+
+	// Дребезг около нуля не виден, но продолжает считаться — обнуляем.
+	if (StepOffset.IsNearlyZero(0.01f) && StepVelocity.IsNearlyZero(0.01f))
+	{
+		StepOffset = FVector2D::ZeroVector;
+		StepVelocity = FVector2D::ZeroVector;
+	}
 }
 
 void UVHSCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView)
@@ -51,7 +85,10 @@ void UVHSCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& Desir
 	// так оно не влияет ни на прицел взаимодействия, ни на логику видимости —
 	// трясётся только картинка.
 	DesiredView.Rotation += SwayRotation;
-	DesiredView.Location += DesiredView.Rotation.RotateVector(SwayOffset);
+
+	// StepOffset.X — просадка по вертикали, .Y — боковой снос.
+	const FVector TotalOffset = SwayOffset + FVector(0.f, StepOffset.Y, StepOffset.X);
+	DesiredView.Location += DesiredView.Rotation.RotateVector(TotalOffset);
 }
 
 void UVHSCameraComponent::SetDistortionScale(float NewScale)
@@ -68,6 +105,8 @@ void UVHSCameraComponent::SetVHSEnabled(bool bEnabled)
 	{
 		SwayRotation = FRotator::ZeroRotator;
 		SwayOffset = FVector::ZeroVector;
+		StepOffset = FVector2D::ZeroVector;
+		StepVelocity = FVector2D::ZeroVector;
 		GlitchTimeLeft = 0.f;
 	}
 }
