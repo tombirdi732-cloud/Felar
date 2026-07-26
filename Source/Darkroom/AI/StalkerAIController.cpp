@@ -428,13 +428,15 @@ bool AStalkerAIController::ChoosePatrolDestination(FVector& OutLocation)
 		}
 	}
 
-	const APawn* Pawn = GetPawn();
-	if (!Pawn)
+	// Не Pawn: у AController уже есть поле с таким именем, а Unreal собирается
+	// с предупреждениями как ошибками, и перекрытие имени ломает сборку.
+	const APawn* ControlledPawn = GetPawn();
+	if (!ControlledPawn)
 	{
 		return false;
 	}
 
-	return GetRandomPointNear(Pawn->GetActorLocation(), RandomPatrolRadius, OutLocation);
+	return GetRandomPointNear(ControlledPawn->GetActorLocation(), RandomPatrolRadius, OutLocation);
 }
 
 bool AStalkerAIController::GetRandomPointNear(const FVector& Origin, float Radius, FVector& OutLocation) const
