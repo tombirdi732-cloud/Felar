@@ -3,6 +3,7 @@
 #include "Felar.h"
 #include "Core/FelarGameState.h"
 #include "Core/FelarPlayerController.h"
+#include "Camera/VHSHud.h"
 #include "Player/FelarCharacter.h"
 #include "World/PickupActor.h"
 
@@ -14,6 +15,9 @@ AFelarGameMode::AFelarGameMode()
 	GameStateClass = AFelarGameState::StaticClass();
 	PlayerControllerClass = AFelarPlayerController::StaticClass();
 	DefaultPawnClass = AFelarCharacter::StaticClass();
+	// Экранная индикация камкордера рисуется через Canvas и работает сразу,
+	// без UMG-виджета. HUDWidgetClass в контроллере остаётся для всего остального.
+	HUDClass = AVHSHud::StaticClass();
 }
 
 void AFelarGameMode::BeginPlay()

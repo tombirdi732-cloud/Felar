@@ -5,7 +5,7 @@
 #include "Core/FelarTypes.h"
 #include "FelarCharacter.generated.h"
 
-class UCameraComponent;
+class UVHSCameraComponent;
 class USpotLightComponent;
 class UFlashlightComponent;
 class UFearComponent;
@@ -79,6 +79,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Felar|Components")
 	UInteractionComponent* GetInteraction() const { return Interaction; }
 
+	UFUNCTION(BlueprintPure, Category = "Felar|Components")
+	UVHSCameraComponent* GetVHSCamera() const { return Camera; }
+
 	UFUNCTION(BlueprintPure, Category = "Felar|Movement")
 	float GetStaminaPercent() const { return FMath::Clamp(Stamina / 100.f, 0.f, 1.f); }
 
@@ -94,7 +97,7 @@ public:
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Components")
-	TObjectPtr<UCameraComponent> Camera;
+	TObjectPtr<UVHSCameraComponent> Camera;
 
 	/** Конус фонаря. Крепится к камере, поэтому светит туда же, куда смотрит игрок. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Felar|Components")

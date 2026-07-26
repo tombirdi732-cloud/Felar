@@ -8,7 +8,7 @@
 #include "AI/StalkerCharacter.h"
 #include "Core/FelarGameMode.h"
 
-#include "Camera/CameraComponent.h"
+#include "Camera/VHSCameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -22,7 +22,7 @@ AFelarCharacter::AFelarCharacter()
 
 	GetCapsuleComponent()->InitCapsuleSize(34.f, 88.f);
 
-	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
+	Camera = CreateDefaultSubobject<UVHSCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(GetCapsuleComponent());
 	Camera->SetRelativeLocation(FVector(0.f, 0.f, 64.f));
 	Camera->bUsePawnControlRotation = true;
@@ -81,6 +81,10 @@ void AFelarCharacter::Tick(float DeltaTime)
 	TickStalkerVisibility(DeltaTime);
 
 	FearComponent->SetInLight(IsInLight());
+
+	// Страх управляет камерой: руки трясутся сильнее, плёнка срывается чаще.
+	// Состояние персонажа читается прямо с картинки, без единого элемента интерфейса.
+	Camera->SetDistortionScale(FearComponent->GetFearPercent());
 }
 
 void AFelarCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -362,6 +366,10 @@ void AFelarCharacter::HandleFearBreakdown()
 {
 	// Срыв слышно отовсюду: это и есть цена сидения в темноте.
 	EmitNoise(ENoiseLevel::Scream);
+
+	// Плёнку ведёт вместе с персонажем — игрок видит срыв, а не только слышит.
+	Camera->TriggerGlitch(1.2f);
+
 	UE_LOG(LogFelar, Log, TEXT("Player fear breakdown - position revealed"));
 }
 
@@ -430,6 +438,10 @@ void AFelarCharacter::OnCaught(AActor* Killer)
 
 	GetCharacterMovement()->DisableMovement();
 	Flashlight->SetLightOn(false);
+
+	// Длинный сбой записи вместо экрана смерти: камера «умирает» вместе с игроком.
+	Camera->SetDistortionScale(1.f);
+	Camera->TriggerGlitch(3.f);
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
