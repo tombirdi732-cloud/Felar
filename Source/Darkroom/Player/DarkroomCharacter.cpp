@@ -38,11 +38,16 @@ ADarkroomCharacter::ADarkroomCharacter()
 	FlashlightLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("FlashlightLight"));
 	FlashlightLight->SetupAttachment(Camera);
 	FlashlightLight->SetRelativeLocation(FVector(20.f, 10.f, -10.f));
-	FlashlightLight->SetInnerConeAngle(18.f);
-	FlashlightLight->SetOuterConeAngle(34.f);
-	FlashlightLight->SetAttenuationRadius(2600.f);
+	FlashlightLight->SetInnerConeAngle(21.f);
+	FlashlightLight->SetOuterConeAngle(39.f);
+	FlashlightLight->SetAttenuationRadius(5000.f);
 	FlashlightLight->SetIntensityUnits(ELightUnits::Candelas);
-	FlashlightLight->SetIntensity(8000.f);
+	// Свет должен резко выбивать конус из темноты, иначе фонарь не ощущается
+	// ресурсом, ради которого стоит рисковать.
+	FlashlightLight->SetIntensity(26000.f);
+	// Тёплый белый: холодный светодиод сливается с лунным светом, и разница
+	// между «своим» светом и окружением перестаёт читаться.
+	FlashlightLight->SetLightColor(FLinearColor(1.f, 0.94f, 0.82f));
 	FlashlightLight->SetVisibility(false);
 	FlashlightLight->SetCastShadows(true);
 

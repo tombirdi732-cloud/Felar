@@ -86,9 +86,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Darkroom|Flashlight", meta = (ClampMin = "1.0"))
 	float MaxBattery = 100.f;
 
-	/** Интенсивность включённого света (candelas). */
+	/**
+	 * Интенсивность включённого света в канделах.
+	 * Это значение — главное: ApplyLightState перезаписывает им яркость
+	 * USpotLightComponent каждый кадр, поэтому правка в конструкторе персонажа
+	 * сама по себе ничего не даст.
+	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Darkroom|Flashlight", meta = (ClampMin = "0.0"))
-	float LightIntensity = 8000.f;
+	float LightIntensity = 26000.f;
 
 	/** Свет тускнеет по мере разряда, но не ниже этой доли от LightIntensity. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Darkroom|Flashlight", meta = (ClampMin = "0.0", ClampMax = "1.0"))
