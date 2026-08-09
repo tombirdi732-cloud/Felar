@@ -82,13 +82,18 @@ SUB_PATTERN = [(0, 2.4, 0), (2.5, 1.4, 0)]
 SUB_PATTERN_B = [(0, 1.9, 0), (2.0, 0.9, 0), (3.25, 0.7, 0)]
 
 # Барабаны (GM)
-KICK, SNARE, RIM, HAT, OPENHAT, RIDE = 36, 38, 37, 42, 46, 51
+KICK, SNARE, CLAP, RIM, HAT, OPENHAT, RIDE = 36, 38, 39, 37, 42, 46, 51
 
 # Boom bap: бочка синкопирована, малый строго на 2 и 4.
 KICK_A = [0.0, 0.75, 2.5]
 KICK_B = [0.0, 1.75, 2.5, 3.5]
 
-SWING = 0.055              # сдвиг «слабых» шестнадцатых, в долях
+SWING = 0.055              # сдвиг «слабых» восьмых, в долях (~56% MPC)
+
+# Бочка и малый играют чуть позади сетки — это и есть «карман» жанра.
+# 0.025 доли на 85 BPM = ~18 мс: ровно тот диапазон, в котором барабаны
+# перестают звучать механически, но ещё не разваливаются.
+LAYBACK = 0.025
 
 # ------------------------------------------------------------- структура
 
@@ -150,24 +155,35 @@ def add_sub(part, bar_beat, chord, pattern, vel):
 
 def add_drums(part, bar_beat, vel, bar_index, lift=False):
     for beat in (KICK_B if bar_index % 4 == 3 else KICK_A):
-        part.add(bar_beat + beat, .4, KICK, hum(vel))
+        part.add(bar_beat + beat + LAYBACK, .4, KICK, hum(vel))
 
     for beat in (1.0, 3.0):                       # малый на 2 и 4
-        part.add(bar_beat + beat, .5, SNARE, hum(vel + 2))
+        b = bar_beat + beat + LAYBACK
+        part.add(b, .5, SNARE, hum(vel + 2))
+        # клэп подкладкой на пару миллисекунд позже — малый становится
+        # шире и «хрустит», один сэмпл такого не даёт
+        part.add(b + 0.004, .3, CLAP, hum(vel - 20))
 
-    # хэты восьмыми со свингом, плюс редкие ролы
+    # Хэты восьмыми со свингом. Держим их в верхней половине шкалы
+    # (примерно 60-100% velocity): акцентные почти на полную, призрачные
+    # заметно тише. Ровные хэты сразу выдают машину.
+    accent = 76 + (vel / 100.0) * 42
+    ghost = 76 + (accent - 76) * 0.35
     for i in range(8):
         b = swung(i * 0.5)
-        part.add(bar_beat + b, .16, HAT, hum(vel - (16 if i % 2 else 8)))
+        part.add(bar_beat + b, .16, HAT,
+                 hum(accent if i % 2 == 0 else ghost, 9))
 
     roll_here = bar_index % 4 == 3 or (lift and bar_index % 2 == 1)
     if roll_here:
-        # лёгкий рол: шестнадцатые или тридцать вторые с нарастанием
+        # Лёгкий рол: шестнадцатые или тридцать вторые с нарастанием.
+        # Идёт от «призрачной» громкости к акцентной — рол должен быть
+        # слышен как приём, а не проваливаться под основную сетку.
         step = .125 if bar_index % 8 == 7 else .25
         n = int(1.0 / step)
         for i in range(n):
             part.add(bar_beat + 3.0 + i * step, step * .7, HAT,
-                     hum(vel - 26 + int(18 * i / max(1, n - 1))))
+                     hum(ghost + (accent - ghost) * i / max(1, n - 1), 6))
     if bar_index % 8 == 7:
         part.add(bar_beat + 3.5, .4, OPENHAT, hum(vel - 14))
 

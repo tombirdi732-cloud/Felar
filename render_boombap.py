@@ -125,11 +125,26 @@ def render_drum(pitch, rng):
             m *= 0.5
         return np.stack([m * 1.02, m * 0.98])
 
+    if pitch == G.CLAP:
+        # клэп: несколько коротких всплесков подряд, без тонального тела
+        n = int(0.20 * SR)
+        t = np.arange(n) / SR
+        m = np.zeros(n)
+        for k, off in enumerate((0.0, 0.007, 0.014)):
+            i = int(off * SR)
+            m[i:] += (dsp.noise(n - i, rng)
+                      * np.exp(-np.arange(n - i) / SR / 0.010) * 0.85 ** k)
+        m += dsp.noise(n, rng) * np.exp(-t / 0.055) * 0.35
+        m = dsp.bp(m, 1100, 6500) * 0.42
+        return np.stack([m * 1.06, m * 0.94])
+
     if pitch in (G.HAT, G.OPENHAT):
         dec = 0.026 if pitch == G.HAT else 0.16
         n = int((dec * 5 + 0.02) * SR)
         t = np.arange(n) / SR
-        m = dsp.hp(dsp.noise(n, rng), 7600) * np.exp(-t / dec) * 0.19
+        # амплитуда ниже, чем кажется: хэты приходят с высокой velocity,
+        # громкость набирается уже на ней
+        m = dsp.hp(dsp.noise(n, rng), 7600) * np.exp(-t / dec) * 0.135
         return np.stack([m * 0.88, m * 1.12])
 
     n = int(1.2 * SR)
